@@ -599,6 +599,7 @@ class CompositionRoot:
             # Auto-start dashboard
             # We don't respect DASHBOARD_ENABLED=False here because it IS the entry point now.
             await self.dashboard_server.start()
+            print(">>> DASHBOARD IS NOW LIVE ON PORT 8000 <<<")
             
             # Create a simple keyboard handler since the bot's isn't initialized yet
             from src.utils.keyboard_handler import KeyboardHandler
@@ -606,9 +607,9 @@ class CompositionRoot:
             kb_handler.register_command('h', lambda: print("Press 'q' to quit"), "Help")
             kb_handler.register_command('q', lambda: os.kill(os.getpid(), 2), "Quit")
             
-            self.logger.info("System Ready. Auto-starting AI Engine...")
+            self.logger.info("System Ready. Auto-starting AI Engine in background...")
             
-            # Auto-start bot langsung tanpa perlu klik tombol
+            # Auto-start bot di background agar dashboard tidak terblokir
             asyncio.create_task(self._start_trading_bot())
             
             # Keep alive loop
