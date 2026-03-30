@@ -1,267 +1,181 @@
-# 🤖 SEMANTIC SIGNAL LLM (LLM Trader)
+# 🤖 Tokocrypto AI Trading Bot
 
-> **Status:** BETA / Research Edition
->
-> **Note:** This is the public research branch. It is frequently experimentally updated. The stable production version runs privately.
->
-> **Autonomous, asyncio-first trading bot that turns market + news + chart context into structured BUY/SELL/HOLD decisions.**
+> **Bot trading otomatis berbasis AI (Google Gemini) untuk exchange Tokocrypto.**  
+> Menganalisa 82+ indikator teknikal, berita crypto, dan sentimen pasar untuk mengeksekusi order BUY/SELL secara langsung di akun Anda.
 
-🔗 **[Live Dashboard](https://semanticsignal.qrak.org)** — Real-time view of the neural trading brain
+---
 
-## Key Features
+## ✨ Fitur Utama
 
-- **Vector-Only Trading Brain**: ChromaDB vector store for semantic trade retrieval and adaptive thresholds.
-- **Adaptive Memory System**: Temporal awareness, decay engine, and automated reflection loops generating persistent Semantic Rules.
-- **RAG Engine**: Aggregates news from CryptoCompare and fundamentals from DefiLlama.
-- **AI & LLM Support**: Multi-provider support (Google Gemini, OpenRouter, BlockRun.AI, LM Studio) with fallback logic and vision-assisted trading.
-- **Multi-Exchange Aggregation**: Fetches data via `ccxt` from Binance, KuCoin, Gate.io, MEXC, Hyperliquid.
+- 🧠 **AI-Powered** — Analisa mendalam menggunakan Google Gemini AI
+- 📊 **82+ Indikator** — RSI, MACD, Bollinger Bands, ADX, TTM Squeeze, OBV, dan lainnya  
+- ⏱️ **Multi-Timeframe** — Mendukung 15m, 30m, 1h, 4h, dan lebih
+- 💰 **Live Trading** — Eksekusi market order langsung ke Tokocrypto
+- 🛡️ **Risk Management** — Stop Loss & Take Profit otomatis dari AI
+- 📰 **News Aware** — Mempertimbangkan berita crypto terkini sebelum keputusan
+- 🖥️ **Dashboard Web** — Monitor bot via browser di `localhost:8000`
+- 🔄 **Auto-Restart** — Bot jalan otomatis di background
 
-![Semantic Signal LLM Dashboard - Overview](img/dashboard1.png)
-![Semantic Signal LLM Dashboard - Brain Activity](img/dashboard2.png)
-![Semantic Signal LLM Dashboard - Last Prompt](img/dashboard3.png)
-![Semantic Signal LLM Dashboard - Last Response](img/dashboard4.png)
-![Semantic Signal LLM Dashboard - Statistics](img/dashboard5.png)
-![Semantic Signal LLM Dashboard - Latest News](img/dashboard6.png)
-![Semantic Signal LLM Dashboard - Market Data](img/dashboard7.png)
-![Semantic Signal LLM Dashboard - Memory Bank](img/dashboard8.png)
+---
 
-## Tech Stack
+## 📋 Persyaratan
 
-- **Language**: Python 3.13+
-- **Database (Vector)**: ChromaDB
-- **Dashboard Backend**: FastAPI, WebSockets
-- **Dashboard Frontend**: HTML, Vanilla JS, Vis.js, ApexCharts
-- **AI Integrations**: Google Gemini, OpenRouter, BlockRun.AI, LM Studio
-- **Market Data**: CCXT, CryptoCompare, Alternative.me, DefiLlama
-- **Code Quality**: Ruff, Pylint, Mypy
+| Kebutuhan | Keterangan |
+|-----------|-----------|
+| OS | Ubuntu / Debian / Pop!_OS (Linux) |
+| Python | 3.10 atau lebih baru |
+| RAM | Minimal 2GB |
+| Internet | Wajib (untuk API) |
 
-## Prerequisites
+---
 
-- Python 3.13+
-- [LM Studio](https://lmstudio.ai/) (Optional — for local offline inference)
+## 🚀 Cara Install
 
-## Getting Started
-
-### 1. Clone the Repository
+### 1. Clone repo
 
 ```bash
-git clone https://github.com/qrak/LLM_trader.git
-cd LLM_trader
+git clone https://github.com/paji52203/bot_tokocypto.git
+cd bot_tokocypto
 ```
 
-### 2. Setup Virtual Environment
+### 2. Jalankan installer
 
-```powershell
-# Setup Virtual Environment
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+```bash
+chmod +x install.sh && ./install.sh
 ```
 
-### 3. Install Dependencies
+Script ini akan otomatis:
+- ✅ Membuat Virtual Environment Python
+- ✅ Menginstall semua library yang dibutuhkan
+- ✅ Menginformasikan API key yang perlu diisi
 
-```powershell
-# Install required dependencies
-pip install -r requirements.txt
+### 3. Isi API Keys
 
-# For development (linting, testing tools)
-pip install -r requirements-dev.txt
+```bash
+nano keys.env
 ```
 
-### 4. Environment Setup
+Isi bagian berikut:
 
-Copy the example keys file:
-
-```powershell
-cp keys.env.example keys.env
+```env
+TOKOCRYPTO_API_KEY=isi_api_key_tokocrypto_anda
+TOKOCRYPTO_API_SECRET=isi_secret_tokocrypto_anda
+GOOGLE_STUDIO_API_KEY=isi_google_ai_studio_key_anda
 ```
 
-Configure the following variables in `keys.env`:
+#### Cara dapat API Key:
 
-| Variable | Description |
-| --- | --- |
-| `OPENROUTER_API_KEY` | (Required) OpenRouter API key if used as a provider. |
-| `GOOGLE_STUDIO_API_KEY` | (Required) Google AI Studio API key (free tier). |
-| `GOOGLE_STUDIO_PAID_API_KEY` | (Optional) Google AI Studio API key (paid tier). |
-| `CRYPTOCOMPARE_API_KEY` | (Optional but recommended) For News RAG (~150k free requests). |
-| `COINGECKO_API_KEY` | (Optional) Free demo key for market metrics. |
-| `BLOCKRUN_WALLET_KEY` | (Optional) Private key for BlockRun.AI x402 micropayments. |
+**Tokocrypto API Key:**
+1. Login ke [tokocrypto.com](https://www.tokocrypto.com)
+2. Profil → API Management → Buat API Key
+3. Aktifkan permission: **Read** + **Trade**
+4. Simpan Key dan Secret
 
-### 5. Bot Configuration
+**Google AI Studio API Key:**
+1. Buka [aistudio.google.com](https://aistudio.google.com)
+2. Klik **Get API Key** → **Create API key**
+3. Salin key-nya
 
-Copy the example config file:
+### 4. Sesuaikan konfigurasi (opsional)
 
-```powershell
-cp config/config.ini.example config/config.ini
+```bash
+nano config/config.ini
 ```
-
-Key sections to configure:
 
 ```ini
-[ai_providers]
-# Options: "local", "googleai", "openrouter", "blockrun", "all"
-provider = googleai
-google_studio_model = gemini-3-flash-preview
-openrouter_base_model = google/gemini-3-flash-preview
-
 [general]
-crypto_pair = BTC/USDC
-timeframe = 4h
-
-[model_config]
-google_temperature = 1.0
-google_thinking_level = high
-
-[dashboard]
-host = 0.0.0.0
-port = 8000
-
-[demo_trading]
-demo_quote_capital = 10000
-transaction_fee_percent = 0.00075
+crypto_pair = BTC/USDT   # Coin yang dipantau
+timeframe = 15m           # Interval analisa (15m, 30m, 1h, 4h)
 ```
 
-### 6. Start the Bot
+### 5. Jalankan bot!
 
-Run the bot directly via Python:
-
-```powershell
-python start.py
+```bash
+./run.sh
 ```
 
-The dashboard will be available at `http://localhost:8000`.
+Bot akan langsung aktif dan mulai menganalisa pasar secara otomatis.
 
-Cloudflare setup reference: `docs/cloudflare_free_cache_playbook.md`.
+---
 
-### 7. Controls
+## 🖥️ Dashboard
 
-| Key | Action |
-| --- | --- |
-| **`a`** | **Force Analysis**: Run immediate market check |
-| **`d`** | **Toggle Dashboard**: Enable or disable the dashboard while the program is running |
-| **`h`** | **Help**: Show available commands |
-| **`q`** | **Quit**: Gracefully shutdown the bot |
+Buka browser dan akses:
 
-## Architecture
-
-At its core, the Crypto Trading Bot leverages LLMs along with a Retrieval-Augmented Generation (RAG) engine to ingest market news, evaluate technical indicators, pattern recognition, and internal trading history ("brain memory"). By combining statistical indicators with human-like textual evaluation, it formulates `BUY`, `SELL`, `HOLD`, or `CLOSE` decisions.
-
-```mermaid
-graph TD
-    subgraph Data Sources
-        Ex["Exchanges (CCXT)"] --> |OHLCV/Trades| DC(Market Data Collector)
-        News[CryptoCompare] --> |Articles| RAG(RAG Engine)
-        Sent[Alternative.me] --> |Fear & Greed| DC
-        DeFi[DefiLlama] --> |TVL/Fundamentals| RAG
-    end
-
-    subgraph Analysis Core
-        DC --> |Market Data| TC[Technical Calculator]
-        DC --> |Price History| PA[Pattern Analyzer]
-        DC --> |Candles| CG[Chart Generator]
-        
-        RAG --> |News Context| CB[Context Builder]
-        
-        %% Orchestration / Assembly
-        TC --> |Indicators| PB[Prompt Builder]
-        PA --> |Patterns| PB
-        CB --> |RAG Context| PB
-        CG --> |Chart Image| PB
-        
-        PB --> |System & User Prompt| MM{Model Manager}
-    end
-
-    subgraph AI Processing
-        %% Provider Selection Logic (Sequential / Fallback)
-        MM -.-> |Primary| Google["Google Gemini (Text + Vision)"]
-        MM -.-> |Fallback| OR["OpenRouter (Text + Vision)"]
-        MM -.-> |Pay-per-request| BR["BlockRun.AI"]
-        MM -.-> |Local| Local["LM Studio"]
-        
-        Google --> |Response| ARP[Analysis Result Processor]
-        OR --> |Response| ARP
-        BR --> |Response| ARP
-        Local --> |Response| ARP
-    end
-
-    subgraph Execution ["Execution (Paper Only)"]
-        ARP --> |JSON Signal| TS[Trading Strategy]
-        TS --> |Simulated Order| DP[Data Persistence]
-        TS --> |Notification| DN["Notifier"]
-    end
+```
+http://localhost:8000
 ```
 
-### Application Entry Points
+Dashboard menampilkan:
+- Status bot (aktif/mati)
+- Sinyal terakhir (BUY/SELL/HOLD)
+- Posisi yang sedang berjalan
+- Harga masuk, Stop Loss, Take Profit
 
-- `start.py`
-  - The true entry point implementing the **Composition Root** and Dependency Injection (DI) pattern.
-  - Bootstraps API clients, memory layers, LLM managers, and the RAG engine concurrently.
-  - Instantiates the `DashboardServer`.
-- `src/app.py`
-  - Contains the `CryptoTradingBot` class. Manages the continuous polling rhythm, trading lifecycle, and real-time Discord alerts.
+---
 
-### Directory Structure & Subsystems
+## 📡 Monitoring Log
 
-```text
-src/
-├── analyzer/          # Turns mathematical bounds into descriptive semantic markers
-│   ├── pattern_engine/# Validates topological shapes & regressions (Head & Shoulders, Trenlines)
-│   ├── formatters/    # Converts array flows and objects into markdown strings
-│   └── prompts/       # Dynamic composition of system/user blocks for LLM contexts
-├── rag/               # Retrieval-Augmented Knowledge Engine
-├── trading/           # State, positions, risk metrics & biological "Brain" tracking  
-├── managers/          # Shared state persistence and AI model routing
-├── platforms/         # External REST/GraphQL integrations (CCXT, Gemini, OpenRouter)
-├── dashboard/         # Real-time Web UI telemetry (FastAPI, WebSockets)
-├── indicators/        # Massive suite of NumPy/Numba powered array calculation files
-├── parsing/           # Resilient LLM JSON output bounds checking
-├── notifiers/         # Markdown-styled embedded notifications for Discord/Console
-└── factories/         # Safe DI dependency construction masking internal logic
-tests/                 # Extensive unit and integration validations with API knocking
-docs/                  # Deep technical documentation and component plans
+Untuk melihat log bot secara real-time:
+
+```bash
+tail -f logs/Bot/$(date +%Y_%m_%d)/Bot.log
 ```
 
-### Request Lifecycle
+---
 
-1. **Pulse Checks**: Every configurable candle/loop wait, `app.py` triggers a market check.
-2. **Data & Vectors**: `rag_engine` pulls recent crypto news directly related to chosen Ticker. Concurrently, `analysis_engine` uses `technical_calculator` on exact timestamp OHLCV.
-3. **Retrieval**: `trading_strategy` and `brain.py` fetch the top comparable historical situations based on technical attributes + PnL success vs failure from ChromaDB. 
-4. **LLM Formulation**: A highly formatted markdown prompt is handed through `model_manager` requesting `BUY`, `SELL`, or `HOLD` along with risk management targets.
-5. **Execution**: Result triggers a change directly translated to trade sizes sent towards the connected `ExchangeManager` and recorded by `statistics.py`. Outputs are streamed via WebSockets toward the `dashboard`.
+## 🛑 Menghentikan Bot
 
-## Testing
-
-The codebase contains a rigorous `tests/` directory covering integration logic, mocking, and unit testing validation. This minimizes regressions specifically in LLM parsing behavior.
-
-```powershell
-# Run the test suite using pytest (make sure pytest is installed)
-pytest tests/
+```bash
+pkill -f "python3 start.py"
 ```
 
-## Roadmap
+---
 
-- [x] **Local LLM Support** (LM Studio Integrated)
-- [x] **Vision Analysis** (Chart Image Generation & Processing)
-- [x] **RAG News Relevance Scoring**
-- [x] **Vector Memory System** (ChromaDB + Semantic Search)
-- [x] **Discord Integration** (Real-time signals, positions, and performance stats)
-- [x] **Interactive CLI** (Hotkeys for manual control)
-- [x] **Web Dashboard**: Real-time visualization of synaptic pathways and neural state.
-- [x] **BlockRun.AI Integration**: Pay-per-request AI access via x402 micropayments.
-- [x] **DefiLlama Fundamentals**: On-chain TVL context in the RAG pipeline.
-- [ ] **Multiple Trading Agent Personalities**: Diverse strategist personalities (conservative, aggressive, contrarian, trend-following).
-- [ ] **Multi-Model Consensus Decision-Making**: A "Council of Models" architecture.
-- [ ] **Live Trading**: Execution Layer integration for verified order placement.
-- [ ] **Static Documentation Site**: Transition docs into a browsable static site (e.g. `MkDocs` or `VitePress`).
+## ⚙️ Jalankan di Background
 
-## Community & Support
-- **Discord**: [Join our community](https://discord.gg/ZC48aTTqR2) for live signals, development chat, and support.
-- **GitHub Issues**: Report bugs or suggest new features.
+Agar bot tetap jalan meski terminal ditutup:
 
-## Disclaimer
-**EDUCATIONAL USE ONLY.** This software is currently in **BETA** and configured for **PAPER TRADING**. No real financial transactions are executed. The authors are not responsible for any financial decisions made based on this software.
+```bash
+nohup ./run.sh > /dev/null 2>&1 &
+```
 
-## Contributors
-- **Vicky (1bcMax)**: Implementation of BlockRun.AI provider and x402 payment integration.
+---
 
-## License
-Licensed under the [MIT License](LICENSE.md).
+## ⚠️ Disclaimer
+
+> Bot ini dibuat untuk tujuan edukasi dan eksperimen.  
+> **Gunakan dengan risiko Anda sendiri.** Pasar crypto sangat volatil dan bot AI tidak menjamin profit.  
+> Selalu gunakan modal yang siap Anda tanggung kerugiannya.
+
+---
+
+## 🔑 Keamanan
+
+- ❌ **JANGAN** commit file `keys.env` ke GitHub
+- ❌ **JANGAN** share API Key ke siapapun
+- ✅ Gunakan API Key dengan permission **Trade Only** (tanpa Withdraw)
+- ✅ Simpan `keys.env` lokal saja
+
+---
+
+## 📦 Struktur Proyek
+
+```
+bot_tokocypto/
+├── run.sh              # Script launcher utama
+├── install.sh          # Installer otomatis
+├── keys.env.example    # Template API keys
+├── config/
+│   └── config.ini      # Konfigurasi bot
+├── src/
+│   ├── platforms/      # Integrasi Tokocrypto (CCXT)
+│   ├── analyzer/       # Mesin analisa AI
+│   ├── trading/        # Strategi & risk management
+│   └── dashboard/      # Web dashboard
+└── QUICKSTART.md       # Panduan singkat
+```
+
+---
+
+Made with ❤️ for Tokocrypto traders
