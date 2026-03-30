@@ -238,8 +238,8 @@ class CryptoTradingBot:
 
         while self.running:
             try:
-                # Check for manual coin override before each analysis
-                await self._check_manual_coin_override()
+                # Check for manual overrides (coin, timeframe) before each analysis
+                await self._check_manual_overrides()
                 
                 check_count += 1
                 await self._execute_trading_check(check_count, force_news_update=is_regular_run, is_candle_close=is_regular_run)
@@ -613,8 +613,8 @@ class CryptoTradingBot:
             for task in self.tasks:
                 if not task.done():
                     task.cancel()
-    async def _check_manual_coin_override(self):
-        """Check if trading coin was manually overridden in dashboard."""
+    async def _check_manual_overrides(self):
+        """Check if trading coin or timeframe was manually overridden in dashboard."""
         path = Path(self.config.DATA_DIR) / "manual_overrides.json"
         if not path.exists():
             return
@@ -623,26 +623,41 @@ class CryptoTradingBot:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 manual_coin = data.get("manual_coin", "").strip().upper()
+                manual_timeframe = data.get("timeframe", "").strip().lower()
                 
+                changed = False
+                
+                # Check Coin Switch
                 if manual_coin and manual_coin != self.current_symbol:
                     self.logger.info("Manual coin override detected: %s -> %s", self.current_symbol, manual_coin)
                     
                     # Verify if exchange supports the new symbol
                     exchange, _ = await self.exchange_manager.find_symbol_exchange(manual_coin)
-                    if not exchange:
+                    if exchange:
+                        self.current_symbol = manual_coin
+                        self.current_exchange = exchange
+                        changed = True
+                    else:
                         self.logger.error("Symbol %s not found on any configured exchange. Staying on %s", manual_coin, self.current_symbol)
-                        return
-                        
-                    # Switch symbols
-                    self.current_symbol = manual_coin
-                    self.current_exchange = exchange
-                    
+
+                # Check Timeframe Switch
+                if manual_timeframe and manual_timeframe != self.current_timeframe:
+                    self.logger.info("Manual timeframe override detected: %s -> %s", self.current_timeframe, manual_timeframe)
+                    # Validate timeframe (basic check)
+                    valid_timeframes = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d']
+                    if manual_timeframe in valid_timeframes:
+                        self.current_timeframe = manual_timeframe
+                        changed = True
+                    else:
+                        self.logger.error("Unsupported timeframe override: %s. Staying on %s", manual_timeframe, self.current_timeframe)
+
+                if changed:
                     # Re-initialize analyzer
                     self.market_analyzer.initialize_for_symbol(
                         symbol=self.current_symbol,
                         exchange=self.current_exchange,
                         timeframe=self.current_timeframe
                     )
-                    self.logger.critical("Bot successfully switched to %s", self.current_symbol)
+                    self.logger.critical("Bot successfully applied overrides: %s @ %s", self.current_symbol, self.current_timeframe)
         except Exception as e:
-            self.logger.error("Error checking manual coin override: %s", e)
+            self.logger.error("Error checking manual overrides: %s", e)

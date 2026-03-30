@@ -12,6 +12,7 @@ class ManualOverrides(BaseModel):
     min_allocation_pct: Optional[float] = 0.0
     max_allocation_pct: Optional[float] = 0.0
     manual_coin: Optional[str] = ""
+    timeframe: Optional[str] = ""
 
 class SettingsRouter:
     """Handles manual overrides for trading parameters."""

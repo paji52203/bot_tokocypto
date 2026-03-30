@@ -232,12 +232,14 @@ async function fetchManualSettings() {
         const tpEl = document.getElementById('setting-tp');
         const minAllocEl = document.getElementById('setting-min-alloc');
         const maxAllocEl = document.getElementById('setting-max-alloc');
+        const timeframeEl = document.getElementById('setting-timeframe');
         
         if (coinEl) coinEl.value = data.manual_coin || '';
         if (slEl) slEl.value = data.stop_loss_pct || '';
         if (tpEl) tpEl.value = data.take_profit_pct || '';
         if (minAllocEl) minAllocEl.value = data.min_allocation_pct || '';
         if (maxAllocEl) maxAllocEl.value = data.max_allocation_pct || '';
+        if (timeframeEl) timeframeEl.value = data.timeframe || '';
         
     } catch (e) {
         console.error("Failed to fetch manual settings", e);
@@ -257,7 +259,8 @@ async function saveManualSettings(e) {
     }
     
     const payload = {
-        manual_coin: document.getElementById('setting-coin').value.trim().upper(),
+        manual_coin: document.getElementById('setting-coin').value.trim().toUpperCase(),
+        timeframe: document.getElementById('setting-timeframe').value,
         stop_loss_pct: parseFloat(document.getElementById('setting-sl').value) || 0,
         take_profit_pct: parseFloat(document.getElementById('setting-tp').value) || 0,
         min_allocation_pct: parseFloat(document.getElementById('setting-min-alloc').value) || 0,
