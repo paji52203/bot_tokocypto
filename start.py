@@ -184,14 +184,14 @@ class CompositionRoot:
         rag = await self._provision_rag_layer(infra, apis, utils)
         models = self._provision_model_layer(utils)
         analyzer = await self._provision_analyzer_layer(infra, apis, utils, rag, models)
-        trading = self._provision_trading_layer(utils)
+        trading = self._provision_trading_layer(infra, utils)
         notifiers = await self._provision_notifiers(utils)
 
         end_time = time.perf_counter()
         init_duration = end_time - start_time
         self.logger.info("All dependencies initialized successfully in %.2f seconds", init_duration)
 
-        # Combine everything for the bot and dashboard
+        # Exclude DashboardServer from deps since it will be managed separately now
         deps = {
             'exchange_manager': infra['exchange_manager'],
             'market_analyzer': analyzer['engine'],
@@ -211,25 +211,8 @@ class CompositionRoot:
             'brain_service': trading['brain_service'],
             'statistics_service': trading['statistics_service'],
             'memory_service': trading['memory_service'],
+            'unified_parser': utils['parser']
         }
-
-        # Always instantiate DashboardServer so the 'd' keyboard toggle can start/stop it at runtime.
-        # The server socket is NOT opened until start() is called, so this is safe even when disabled.
-        dashboard_server = DashboardServer(
-            brain_service=trading['brain_service'],
-            vector_memory=trading['brain_service'].vector_memory if trading['brain_service'] else None,
-            analysis_engine=analyzer['engine'],
-            config=self.config,
-            logger=self.logger,
-            unified_parser=utils['parser'],
-            persistence=trading['persistence'],
-            exchange_manager=infra['exchange_manager'],
-            host=self.config.DASHBOARD_HOST,
-            port=self.config.DASHBOARD_PORT
-        )
-
-        deps['dashboard_server'] = dashboard_server
-        deps['dashboard_state'] = dashboard_server.dashboard_state
 
         return deps
 
@@ -428,7 +411,7 @@ class CompositionRoot:
         
         return {'engine': engine}
 
-    def _provision_trading_layer(self, utils: dict) -> dict:
+    def _provision_trading_layer(self, infra: dict, utils: dict) -> dict:
         """Provision trading strategy and memory services."""
         persistence = PersistenceManager(self.logger, data_dir="data/trading")
         risk_manager = RiskManager(self.logger, self.config)
@@ -459,7 +442,8 @@ class CompositionRoot:
         strategy = TradingStrategy(
             self.logger, persistence, brain_service, statistics_service, memory_service,
             risk_manager, self.config, PositionExtractor(self.logger, utils['parser']),
-            PositionFactory(self.logger)
+            PositionFactory(self.logger),
+            exchange_manager=infra['exchange_manager']
         )
         
         return {
@@ -521,8 +505,63 @@ class CompositionRoot:
             
         return {'notifier': notifier, 'task': task}
     
+    async def _start_trading_bot(self):
+        """Build dependencies and start the Heavy AI Trading Bot."""
+        if hasattr(self, '_bot_running') and self._bot_running:
+            return
+
+        self.logger.info("Building heavy Bot Dependencies...")
+        dependencies = await self.build_dependencies()
+        
+        # Inject dependencies back to Dashboard
+        if self.dashboard_server:
+            self.dashboard_server.inject_dependencies({
+                'brain_service': dependencies['brain_service'],
+                'vector_memory': dependencies['brain_service'].vector_memory if dependencies['brain_service'] else None,
+                'analysis_engine': dependencies['market_analyzer'],
+                'unified_parser': dependencies['unified_parser'],
+                'persistence': dependencies['persistence'],
+                'exchange_manager': dependencies['exchange_manager']
+            })
+
+        self.bot = CryptoTradingBot(
+            logger=self.logger,
+            config=self.config,
+            shutdown_manager=self.shutdown_manager,
+            **{k: v for k, v in dependencies.items() if k not in ['unified_parser']}
+        )
+        
+        await self.bot.initialize()
+        symbol = self.config.CRYPTO_PAIR
+        timeframe = self.config.TIMEFRAME
+
+        self._bot_running = True
+        if self.dashboard_server:
+            self.dashboard_server.bot_running = True
+            
+        self.bot_task = asyncio.create_task(self.bot.run(symbol, timeframe))
+        self.logger.info("Bot logic successfully started and engaged.")
+
+    async def _stop_trading_bot(self):
+        """Stop the heavy AI Trading Bot but leave Dashboard alive."""
+        if not hasattr(self, '_bot_running') or not self._bot_running:
+            return
+            
+        self.logger.info("Stopping Bot Logic...")
+        if hasattr(self, 'bot_task') and self.bot_task:
+            self.bot_task.cancel()
+            try:
+                await self.bot_task
+            except asyncio.CancelledError:
+                pass
+            
+        self._bot_running = False
+        if self.dashboard_server:
+            self.dashboard_server.bot_running = False
+        self.logger.info("Bot logic successfully stopped.")
+
     async def run_async(self):
-        """Async entry point for the application."""
+        """Async entry point for the application. Starts the Dashboard first."""
         def _asyncio_exception_handler(loop, context):
             exc = context.get("exception")
             msg = context.get("message", "Unknown asyncio error")
@@ -537,61 +576,51 @@ class CompositionRoot:
         if self.loop:
             self.loop.set_exception_handler(_asyncio_exception_handler)
 
-        dependencies = await self.build_dependencies()
-
-        # Extract dashboard_server before passing to bot (bot doesn't accept it)
-        dashboard_server = dependencies.pop('dashboard_server', None)
-
-        bot = CryptoTradingBot(
-            logger=self.logger,
+        self.logger.info("Initializing Light Dashboard Server...")
+        self._init_directories()
+        
+        self.dashboard_server = DashboardServer(
+            brain_service=None,
+            vector_memory=None,
+            analysis_engine=None,
             config=self.config,
-            shutdown_manager=self.shutdown_manager,
-            **dependencies
+            logger=self.logger,
+            unified_parser=None,
+            persistence=None,
+            exchange_manager=None,
+            host=self.config.DASHBOARD_HOST,
+            port=self.config.DASHBOARD_PORT
         )
+        self.dashboard_server.bot_start_callback = self._start_trading_bot
+        self.dashboard_server.bot_stop_callback = self._stop_trading_bot
+        self._bot_running = False
 
         try:
-            await bot.initialize()
-            symbol = self.config.CRYPTO_PAIR
-            timeframe = self.config.TIMEFRAME
-
-            # Track whether dashboard is currently running
-            dashboard_running = False
-
-            async def _toggle_dashboard():
-                nonlocal dashboard_running
-                if not dashboard_server:
-                    return
-                if dashboard_running:
-                    self.logger.info("Dashboard: stopping (kill switch)...")
-                    await dashboard_server.stop()
-                    dashboard_running = False
-                    self.logger.info("Dashboard stopped. Press 'd' to restart.")
-                else:
-                    self.logger.info("Dashboard: starting...")
-                    await dashboard_server.start()
-                    dashboard_running = True
-                    self.logger.info("Dashboard live at http://localhost:%s", self.config.DASHBOARD_PORT)
-
-            bot.keyboard_handler.register_command('d', _toggle_dashboard, "Toggle dashboard on/off")
-
-            self.logger.info("Keyboard commands: 'a' = force analysis, 'd' = toggle dashboard, 'h' = help, 'q' = quit")
-
-            # Auto-start dashboard if enabled in config (fire-and-forget task)
-            if dashboard_server and self.config.DASHBOARD_ENABLED:
-                await dashboard_server.start()
-                dashboard_running = True
-            elif not self.config.DASHBOARD_ENABLED:
-                self.logger.info("Dashboard disabled (config). Press 'd' to start it.")
-
-            # Bot runs independently; dashboard is managed by _toggle_dashboard
-            await asyncio.create_task(bot.run(symbol, timeframe))
+            # Auto-start dashboard
+            # We don't respect DASHBOARD_ENABLED=False here because it IS the entry point now.
+            await self.dashboard_server.start()
+            
+            # Create a simple keyboard handler since the bot's isn't initialized yet
+            from src.utils.keyboard_handler import KeyboardHandler
+            kb_handler = KeyboardHandler(self.logger)
+            kb_handler.register_command('h', lambda: print("Press 'q' to quit"), "Help")
+            kb_handler.register_command('q', lambda: os.kill(os.getpid(), 2), "Quit")
+            
+            self.logger.info("System Ready. Auto-starting AI Engine...")
+            
+            # Auto-start bot langsung tanpa perlu klik tombol
+            asyncio.create_task(self._start_trading_bot())
+            
+            # Keep alive loop
+            while True:
+                await asyncio.sleep(1)
 
         except asyncio.CancelledError:
-            self.logger.info("Trading cancelled, shutting down...")
+            self.logger.info("Process cancelled, shutting down...")
         finally:
-            # Clean up dashboard server
-            if dashboard_server:
-                await dashboard_server.stop()
+            await self._stop_trading_bot()
+            if hasattr(self, 'dashboard_server') and self.dashboard_server:
+                await self.dashboard_server.stop()
     
     def start(self):
         """Main entry point with clean shutdown delegation."""

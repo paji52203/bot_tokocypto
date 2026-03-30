@@ -43,7 +43,46 @@ class DashboardServer:
         self.server_task = None
         self._server = None
         self.dashboard_state = dashboard_state
+        self.bot_start_callback = None
+        self.bot_stop_callback = None
+        self.bot_running = False
         self.app = self._create_app()
+
+    def inject_dependencies(self, deps: dict):
+        """Dynamically inject dependencies into the app state after bot startup."""
+        self.brain_service = deps.get('brain_service')
+        self.vector_memory = deps.get('vector_memory')
+        self.analysis_engine = deps.get('analysis_engine')
+        self.unified_parser = deps.get('unified_parser')
+        self.persistence = deps.get('persistence')
+        self.exchange_manager = deps.get('exchange_manager')
+
+        self.app.state.brain_service = self.brain_service
+        self.app.state.vector_memory = self.vector_memory
+        self.app.state.analysis_engine = self.analysis_engine
+        self.app.state.unified_parser = self.unified_parser
+        self.app.state.persistence = self.persistence
+        self.app.state.exchange_manager = self.exchange_manager
+        
+        # We also need to inject into rag_engine if present
+        try:
+            self.app.state.rag_engine = self.brain_service.rag_engine if self.brain_service else None
+        except AttributeError:
+            self.app.state.rag_engine = None
+
+        # Update router instances
+        if hasattr(self, 'brain_router_instance'):
+            self.brain_router_instance.brain_service = self.brain_service
+            self.brain_router_instance.vector_memory = self.vector_memory
+            self.brain_router_instance.persistence = self.persistence
+            self.brain_router_instance.exchange_manager = self.exchange_manager
+            
+        if hasattr(self, 'monitor_router_instance'):
+            self.monitor_router_instance.analysis_engine = self.analysis_engine
+            self.monitor_router_instance.rag_engine = self.app.state.rag_engine
+            
+        if hasattr(self, 'visuals_router_instance'):
+            self.visuals_router_instance.analysis_engine = self.analysis_engine
 
     def _create_app(self) -> FastAPI:
         """Create and configure the FastAPI application."""
@@ -313,8 +352,37 @@ class DashboardServer:
         app.state.dashboard_state = self.dashboard_state
         # Expose for testing/monitoring
         app.state.request_counts = request_counts
+        
+        @app.get("/api/system/status")
+        async def system_status():
+            keys = [
+                self.config.TOKOCRYPTO_API_KEY,
+                self.config.TOKOCRYPTO_API_SECRET,
+                self.config.GOOGLE_STUDIO_API_KEY
+            ]
+            ready = True
+            for k in keys:
+                if not k or "placeholder" in str(k).lower():
+                    ready = False
+                    break
+            return {
+                "system_ready": ready, 
+                "bot_running": self.bot_running
+            }
 
-        brain_router = brain.BrainRouter(
+        @app.post("/api/system/start")
+        async def system_start():
+            if not self.bot_running and self.bot_start_callback:
+                asyncio.create_task(self.bot_start_callback())
+            return {"status": "starting"}
+
+        @app.post("/api/system/stop")
+        async def system_stop():
+            if self.bot_running and self.bot_stop_callback:
+                asyncio.create_task(self.bot_stop_callback())
+            return {"status": "stopping"}
+
+        self.brain_router_instance = brain.BrainRouter(
             config=self.config,
             logger=self.logger,
             dashboard_state=self.dashboard_state,
@@ -328,19 +396,19 @@ class DashboardServer:
         except AttributeError:
             rag_engine = None
             
-        monitor_router = monitor.MonitorRouter(
+        self.monitor_router_instance = monitor.MonitorRouter(
             config=self.config,
             logger=self.logger,
             dashboard_state=self.dashboard_state,
             analysis_engine=self.analysis_engine,
             rag_engine=rag_engine
         )
-        performance_router = performance.PerformanceRouter(
+        self.performance_router_instance = performance.PerformanceRouter(
             config=self.config,
             logger=self.logger,
             dashboard_state=self.dashboard_state
         )
-        visuals_router = visuals.VisualsRouter(
+        self.visuals_router_instance = visuals.VisualsRouter(
             analysis_engine=self.analysis_engine
         )
         websocket_router = ws_router.WebSocketRouter(
@@ -349,10 +417,10 @@ class DashboardServer:
             dashboard_state=self.dashboard_state
         )
 
-        app.include_router(brain_router.router)
-        app.include_router(monitor_router.router)
-        app.include_router(visuals_router.router)
-        app.include_router(performance_router.router)
+        app.include_router(self.brain_router_instance.router)
+        app.include_router(self.monitor_router_instance.router)
+        app.include_router(self.visuals_router_instance.router)
+        app.include_router(self.performance_router_instance.router)
         app.include_router(websocket_router.router)
 
         # Mount Static Files (Frontend)

@@ -176,12 +176,59 @@ function togglePanelMinimize(panelId) {
     }
 }
 
+async function fetchSystemStatus() {
+    try {
+        const response = await fetch('/api/system/status');
+        const data = await response.json();
+        
+        const icon = document.getElementById('api-status-icon');
+        const text = document.getElementById('api-status-text');
+        const btnStart = document.getElementById('btn-system-start');
+        const btnStop = document.getElementById('btn-system-stop');
+        
+        if (!icon || !btnStart) return;
+        
+        if (data.system_ready) {
+            icon.textContent = '✅';
+            icon.style.color = '#10b981';
+            text.textContent = 'API Keys Integrated';
+            if (!data.bot_running) {
+                btnStart.disabled = false;
+                btnStart.style.opacity = '1';
+                btnStart.style.cursor = 'pointer';
+            }
+        } else {
+            icon.textContent = '❌';
+            icon.style.color = '#ef4444';
+            text.textContent = 'API Config Required';
+            btnStart.disabled = true;
+            btnStart.style.opacity = '0.5';
+            btnStart.style.cursor = 'not-allowed';
+        }
+        
+        if (data.bot_running) {
+            btnStart.style.display = 'none';
+            btnStop.style.display = 'flex';
+            btnStop.disabled = false;
+            btnStop.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg> Stop AI Engine';
+        } else {
+            btnStart.style.display = 'flex';
+            btnStop.style.display = 'none';
+            btnStart.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Start AI Engine';
+        }
+        
+    } catch (e) {
+        console.error("System status check failed", e);
+    }
+}
+
 async function updateAll() {
     await updateFastLane();
     await updateSlowLane();
 }
 
 async function updateFastLane() {
+    await fetchSystemStatus();
     await fetchBrainStatus();
     await updatePositionData();
 }
@@ -232,6 +279,26 @@ function initApp() {
         const btnCopyResponse = document.getElementById('btn-copy-response');
         if (btnCopyResponse && window.copyResponseContent) {
             btnCopyResponse.addEventListener('click', window.copyResponseContent);
+        }
+
+        const btnSysStart = document.getElementById('btn-system-start');
+        if (btnSysStart) {
+            btnSysStart.addEventListener('click', async () => {
+                btnSysStart.innerHTML = '<span class="spinner spinner-sm"></span> Booting...';
+                btnSysStart.disabled = true;
+                await fetch('/api/system/start', { method: 'POST' });
+                await fetchSystemStatus();
+            });
+        }
+        
+        const btnSysStop = document.getElementById('btn-system-stop');
+        if (btnSysStop) {
+            btnSysStop.addEventListener('click', async () => {
+                btnSysStop.innerHTML = '<span class="spinner spinner-sm"></span> Halting...';
+                btnSysStop.disabled = true;
+                await fetch('/api/system/stop', { method: 'POST' });
+                await fetchSystemStatus();
+            });
         }
 
         initPerformanceChart();

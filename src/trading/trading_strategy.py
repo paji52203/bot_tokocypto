@@ -28,6 +28,7 @@ class TradingStrategy:
         config: Any = None,
         position_extractor=None,
         position_factory=None,
+        exchange_manager=None,
     ):
         """Initialize the trading strategy with DI pattern.
 
@@ -51,6 +52,7 @@ class TradingStrategy:
         self.config = config
         self.extractor = position_extractor
         self.position_factory = position_factory
+        self.exchange_manager = exchange_manager
 
         # Load any existing position
         self.current_position: Optional[Position] = self.persistence.load_position()
@@ -101,6 +103,16 @@ class TradingStrategy:
         """
         if not self.current_position:
             return
+
+        # LIVE EXECUTION CLOSURE
+        if self.exchange_manager and self.current_position:
+            try:
+                if self.current_position.direction == "LONG":
+                    await self.exchange_manager.create_market_sell_order("tokocrypto", self.current_position.symbol, self.current_position.size)
+                else:
+                    await self.exchange_manager.create_market_buy_order("tokocrypto", self.current_position.symbol, self.current_position.size)
+            except Exception as e:
+                self.logger.error("Failed to close live order: %s", e)
 
         pnl = self.current_position.calculate_pnl(current_price)
 
@@ -322,8 +334,21 @@ class TradingStrategy:
         direction = "LONG" if signal == "BUY" else "SHORT"
         market_conditions = market_conditions or {}
 
-        # Calculate quantity based on CURRENT capital (not initial)
-        capital = self.statistics_service.get_current_capital(self.config.DEMO_QUOTE_CAPITAL)
+        # Calculate quantity based on REAL LIVE Tokocrypto capital if available
+        if self.exchange_manager and hasattr(self.config, 'TOKOCRYPTO_API_KEY') and self.config.TOKOCRYPTO_API_KEY:
+            # We await fetch_wallet_balance but this function is sync unless changed?
+            # Wait, fetch_wallet_balance was defined as async in exchange_manager.py
+            capital = await self.exchange_manager.fetch_wallet_balance("tokocrypto", self.config.QUOTE_CURRENCY)
+            self.logger.critical("Using real LIVE Tokocrypto capital: $%s %s", f"{capital:,.2f}", self.config.QUOTE_CURRENCY)
+            if capital <= 0:
+                self.logger.warning("Live capital is zero or failed to fetch. Falling back to paper capital.")
+                capital = self.statistics_service.get_current_capital(self.config.DEMO_QUOTE_CAPITAL)
+        else:
+            capital = self.statistics_service.get_current_capital(self.config.DEMO_QUOTE_CAPITAL)
+
+        # AGGRESSIVE MODE: Force position size to 30% of available capital
+        position_size = 0.30
+        self.logger.warning("AGGRESSIVE MODE: Sizing forced to 30% of capital")
 
         # Delegate Risk Calculation to RiskManager
         risk_assessment = self.risk_manager.calculate_entry_parameters(
@@ -358,6 +383,27 @@ class TradingStrategy:
             confluence_factors=confluence_factors,
             market_conditions=market_conditions
         )
+
+        # LIVE EXECUTION ENTRY
+        if self.exchange_manager:
+            try:
+                order = None
+                if direction == "LONG":
+                     order = await self.exchange_manager.create_market_buy_order(
+                         "tokocrypto", symbol, quantity,
+                         quote_amount=risk_assessment.quote_amount  # kirim USDT cost untuk Tokocrypto
+                     )
+                else:
+                     order = await self.exchange_manager.create_market_sell_order("tokocrypto", symbol, quantity)
+                
+                if order is None:
+                     self.logger.warning("Live order rejected by exchange. Aborting local position creation.")
+                     self.current_position = None
+                     return None
+            except Exception as e:
+                self.logger.error("Failed to execute live sequence: %s", e)
+                self.current_position = None
+                return None
 
         await self.persistence.async_save_position(self.current_position)
         self.logger.info("Opened %s position @ $%s (SL: $%s, TP: $%s, Qty: %.6f, Fee: $%.4f)", direction, f"{current_price:,.2f}", f"{final_sl:,.2f}", f"{final_tp:,.2f}", quantity, entry_fee)

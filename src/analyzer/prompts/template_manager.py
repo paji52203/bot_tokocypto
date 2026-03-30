@@ -63,13 +63,15 @@ class TemplateManager:
             ])
 
         header_lines.extend([
-            "## Core Principles",
-            "- Indicators calculated on CLOSED CANDLES ONLY (no repaint). Current price is REAL-TIME (incomplete candle).",
-            "- STOP EXECUTION: This bot uses SOFT STOPS evaluated ONLY at candle CLOSE. Intra-candle wicks below SL do NOT trigger exits. Set SL at levels where a CLOSE below invalidates the thesis, not where wicks might touch.",
-            "- Decisions must be based on CONFIRMED signals, not speculation.",
+            "## Core Principles (AGGRESSIVE SCALPING MODE)",
+            "- You are in AGGRESSIVE MODE. Do not wait for perfect macroeconomic alignment. Act on short-term momentum and price action.",
+            "- TAKE RAPID PROFITS: Secure profits quickly. Do not hold positions for long-term swings. Target 1% to 3% moves.",
+            "- CUT LOSSES TIGHT: Use extremely tight stop losses (e.g. 0.5% to 1.5%). Invalidate the trade instantly if momentum fades.",
+            "- Indicators calculated on CLOSED CANDLES ONLY. Current price is REAL-TIME.",
+            "- STOP EXECUTION: This bot uses SOFT STOPS evaluated ONLY at candle CLOSE.",
             "- Risk management is paramount: SL and TP required for every trade.",
-            "- Confidence must match signal strength: >70 required for trades (strong setups only).",
-            "- MAXIMIZE PROFIT: Learn from past trades, avoid repeated mistakes, improve win rate.",
+            "- AGGRESSIVE ENTRY: Enter when short-term momentum aligns, even if macro is mixed.",
+            "- CLOSE PROACTIVELY: If your analysis at candle close shows stalling momentum, signal CLOSE instantly. Don't wait for SL.",
             "",
             "## Technical Terminology (CRITICAL)",
             "- **Golden Cross**: ONLY when 50 SMA crosses ABOVE 200 SMA (major bullish event, rare)",
@@ -87,14 +89,12 @@ class TemplateManager:
                 performance_context.strip(),
                 "",
                 "",
-                "## Profit Maximization Strategy",
-                "- LEARN from closed trades: Why did stops get hit? Were entries premature? Was trend strength misjudged?",
-                "- IMPROVE win rate: Only trade when multiple factors align strongly (see confluence rules in Response Format)",
-                "- AVOID repeated mistakes: If recent trades failed due to weak setups, demand stronger confirmation",
-                "- HOLD discipline: Better to miss a trade than force a weak setup",
-                "- UPDATE positions actively: Move SL to breakeven after 1:1 or 1.5:1 gain, trail stops on strong trends, adjust TP if momentum extends",
-                "- CLOSE proactively: If your analysis at candle close shows the thesis is invalidated, signal CLOSE — don't wait for SL to be hit",
-                "- ADAPT to performance: If win rate is low, increase entry standards and risk/reward requirements",
+                "## Performance Adaptation Strategy",
+                "- LEARN from closed trades: Why did stops get hit? Were entries premature?",
+                "- IMPROVE win rate: Refine aggressive entries based on recent closed trades.",
+                "- AVOID repeated mistakes: If recent scalps failed, demand slightly stronger short-term confirmation.",
+                "- UPDATE positions actively: Move SL to breakeven immediately after small gains.",
+                "- ADAPT to performance: Adjust your scalping aggressiveness based on recent success rate.",
             ])
 
         if brain_context:
@@ -293,11 +293,9 @@ HOLD SIGNAL JSON FIELDS (no open position):
 - `position_size`: 0.0 (no position opened)
 - `risk_reward_ratio`: Calculated from the conditional entry (shows the setup you are waiting for)
 
-RISK/REWARD GUIDELINES:
-- R/R < {rr_borderline:.1f}: Very unfavorable - strongly consider HOLD
-- R/R {rr_borderline:.1f}-{min_rr:.1f}: Borderline - only trade with exceptional confluence ({conf_weak}+)
-- R/R >= {min_rr:.1f}: Standard acceptable quality
-- R/R >= {rr_strong:.1f}: Strong setup - preferred for counter-trend trades
+RISK/REWARD GUIDELINES (AGGRESSIVE MODE):
+- High R/R is good, but focus on HIGH PROBABILITY SHORT-TERM MOVES.
+- Accept lower R/R (e.g., 1:1 or 1.5:1) if the short-term momentum is extremely strong.
 
 R/R CALCULATION (MANDATORY - show your work):
 - For BUY/SELL signals: risk = |entry_price - stop_loss|, reward = |take_profit - entry_price|
@@ -306,17 +304,17 @@ R/R CALCULATION (MANDATORY - show your work):
 - For HOLD (no position): Use your conditional `entry_price` (NOT current market price). risk = |entry_price - stop_loss|, reward = |take_profit - entry_price|. This shows the quality of the setup you are waiting for.
 - risk_reward_ratio = reward / risk
 
-RISK MANAGEMENT (Stop Loss & Take Profit):{safe_mae_line}
+RISK MANAGEMENT (Stop Loss & Take Profit - AGGRESSIVE SCALPING):{safe_mae_line}
 LONG trades:
-- SL: Below swing low + 1x ATR buffer (max {avg_sl:.1f}% from entry) | Example: Entry $100, Swing Low $97, ATR $1 → SL $96
-- TP: Key resistance levels, Fibonacci (0.618/0.786/1.0), previous highs | Multiple targets: TP1=1.5R, TP2=2.5R, TP3=3.5R
+- SL: Very tight, just below recent 15m/30m minor swing low or strong support (max 0.5% - 1.5% from entry).
+- TP: Rapid profit taking at immediate next resistance (aim for 1% - 3% moves).
 
 SHORT trades:
-- SL: Above swing high + 1x ATR buffer (max {avg_sl:.1f}% from entry) | Example: Entry $100, Swing High $103, ATR $1 → SL $104
-- TP: Key support levels, Fibonacci (0.382/0.236/0.0), previous lows | Multiple targets: TP1=1.5R, TP2=2.5R, TP3=3.5R
+- SL: Very tight, just above recent 15m/30m minor swing high or strong resistance (max 0.5% - 1.5% from entry).
+- TP: Rapid profit taking at immediate next support (aim for 1% - 3% moves).
 
 
-Mandatory: All trades require stops based on technical levels (not arbitrary %), accounting for ATR volatility, positioned to invalidate thesis if hit.'''
+Mandatory: In aggressive mode, never use wide stops. Invalidate trades quickly. Utilize strict SL and TP.'''
 
         # Add threshold origin annotations if brain data is available
         if trade_count > 0:

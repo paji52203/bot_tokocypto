@@ -205,6 +205,14 @@ class Config:
         return self.get_env('BLOCKRUN_WALLET_KEY')
 
     @property
+    def TOKOCRYPTO_API_KEY(self):
+        return self.get_env('TOKOCRYPTO_API_KEY')
+
+    @property
+    def TOKOCRYPTO_API_SECRET(self):
+        return self.get_env('TOKOCRYPTO_API_SECRET')
+
+    @property
     def ADMIN_USER_IDS(self):
         """Get list of admin user IDs from environment."""
         admin_ids = self.get_env('ADMIN_USER_IDS', '')
@@ -422,7 +430,8 @@ class Config:
     @property
     def SUPPORTED_EXCHANGES(self):
         """Returns list of supported exchanges in priority order."""
-        return self.get_config('exchanges', 'supported', ['binance', 'kucoin', 'gateio'])
+        val = self.get_config('exchanges', 'supported', ['binance', 'kucoin', 'gateio'])
+        return [val] if isinstance(val, str) else val
 
     @property
     def MARKET_REFRESH_HOURS(self):

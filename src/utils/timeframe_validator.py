@@ -13,7 +13,7 @@ import re
 
 class TimeframeValidator:
     """Validates and manages timeframe configurations"""
-    SUPPORTED_TIMEFRAMES = ['1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
+    SUPPORTED_TIMEFRAMES = ['15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
     # Time constants
     MINUTES_IN_HOUR = 60
     MINUTES_IN_DAY = 1440
@@ -31,6 +31,8 @@ class TimeframeValidator:
     MONDAY_ALIGNMENT_OFFSET_DAYS = 4
 
     TIMEFRAME_MINUTES = {
+        '15m': 15,
+        '30m': 30,
         '1h': MINUTES_IN_HOUR,
         '2h': 2 * MINUTES_IN_HOUR,
         '4h': 4 * MINUTES_IN_HOUR,
@@ -41,6 +43,8 @@ class TimeframeValidator:
         '1w': MINUTES_IN_WEEK
     }
     CRYPTOCOMPARE_FORMAT = {
+        '15m': 'minute',
+        '30m': 'minute',
         '1h': 'hour',
         '2h': 'hour',
         '4h': 'hour',
@@ -49,7 +53,7 @@ class TimeframeValidator:
         '12h': 'hour',
         '1d': 'day'
     }
-    CCXT_STANDARD_TIMEFRAMES = ['1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
+    CCXT_STANDARD_TIMEFRAMES = ['15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
 
     @classmethod
     def validate(cls, timeframe: str) -> bool:
@@ -96,13 +100,15 @@ class TimeframeValidator:
         Raises:
             ValueError: If period format is invalid
         """
-        match = re.match(r'^(\d+)([hd])$', period.lower())
+        match = re.match(r'^(\d+)([hdm])$', period.lower())
         if not match:
             raise ValueError(f"Invalid period format: {period}")
 
         value = int(match.group(1))
         unit = match.group(2)
 
+        if unit == 'm':
+            return value
         if unit == 'h':
             return value * cls.MINUTES_IN_HOUR
         if unit == 'd':
@@ -168,6 +174,8 @@ class TimeframeValidator:
             multiplier = int(timeframe.replace('h', ''))
         elif 'd' in timeframe:
             multiplier = int(timeframe.replace('d', ''))
+        elif 'm' in timeframe:
+            multiplier = int(timeframe.replace('m', ''))
         else:
             multiplier = 1
 

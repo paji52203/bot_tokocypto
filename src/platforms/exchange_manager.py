@@ -110,7 +110,30 @@ class ExchangeManager:
             if self.session:
                 exchange_config['session'] = self.session
 
+            # Authenticate Tokocrypto 
+            if exchange_id == "tokocrypto":
+                if self.config.TOKOCRYPTO_API_KEY and self.config.TOKOCRYPTO_API_SECRET:
+                    exchange_config['apiKey'] = self.config.TOKOCRYPTO_API_KEY
+                    exchange_config['secret'] = self.config.TOKOCRYPTO_API_SECRET
+                    self.logger.info("Tokocrypto API Keys loaded successfully")
+                else:
+                    self.logger.warning("Tokocrypto API keys missing. Only public endpoints will work.")
+                # Tokocrypto (Binance-based): market buy uses USDT cost, not BTC quantity
+                # recvWindow 10000ms agar tidak rejected di laptop lambat (default 5000ms)
+                exchange_config['options'] = {
+                    'createMarketBuyOrderRequiresPrice': False,
+                    'recvWindow': 10000,
+                }
+
             exchange = exchange_class(exchange_config)
+
+            # Patch CCXT Tokocrypto URLs to bypass Indonesian ISP blocking of api.binance.com
+            if exchange_id == "tokocrypto" and getattr(exchange, 'urls', {}).get('api'):
+                api_urls = exchange.urls['api']
+                if 'binance' in api_urls:
+                    api_urls['binance'] = 'https://data-api.binance.vision/api/v3'
+                if 'rest' in api_urls and 'binance' in api_urls['rest']:
+                    api_urls['rest']['binance'] = 'https://data-api.binance.vision/api/v3'
 
             # Load markets
             await exchange.load_markets()
@@ -244,3 +267,77 @@ class ExchangeManager:
         for symbols in self.symbols_by_exchange.values():
             all_symbols.update(symbols)
         return all_symbols
+
+    async def fetch_wallet_balance(self, exchange_id: str, currency: str) -> float:
+        """Fetch real free balance for a specific currency"""
+        try:
+            exchange = await self._ensure_exchange_loaded(exchange_id)
+            if not exchange:
+                return 0.0
+            if not getattr(exchange, 'apiKey', None):
+                self.logger.warning(f"Cannot fetch balance on {exchange_id}: API keys not set.")
+                return 0.0
+            
+            balance = await exchange.fetch_balance()
+            if currency in balance and 'free' in balance[currency]:
+                return float(balance[currency]['free'])
+            return 0.0
+        except Exception as e:
+            self.logger.error("Failed to fetch balance: %s", e)
+            return 0.0
+            
+    async def create_market_buy_order(self, exchange_id: str, symbol: str, amount: float, quote_amount: float = 0.0) -> Optional[Dict]:
+        """Execute a REAL live market buy order. WARNING: SPENDS ACTUAL FUNDS.
+        
+        For Tokocrypto (Binance-based): passes USDT cost (quote_amount), not BTC quantity.
+        """
+        try:
+            exchange = await self._ensure_exchange_loaded(exchange_id)
+            if not exchange:
+                return None
+            # Tokocrypto market buy: kirim cost USDT bukan qty BTC
+            cost = quote_amount if quote_amount > 0 else amount
+            self.logger.critical(f"LIVE EXECUTION: Creating Market BUY ${cost:.2f} USDT of {symbol} on {exchange_id}")
+            order = await exchange.create_market_buy_order(symbol, cost)
+            self.logger.info(f"Live BUY order filled: {order.get('id', 'N/A')} @ avg {order.get('average', 'N/A')}")
+            return order
+        except Exception as e:
+            self.logger.error("Live BUY order failed: %s", e)
+            return None
+
+    async def create_market_sell_order(self, exchange_id: str, symbol: str, amount: float) -> Optional[Dict]:
+        """Execute a REAL live market sell order.
+        
+        For spot exchanges (Tokocrypto): only sells what you actually own.
+        Checks BTC balance first to prevent Insufficient Balance errors.
+        """
+        try:
+            exchange = await self._ensure_exchange_loaded(exchange_id)
+            if not exchange:
+                return None
+            
+            # Cek saldo base currency (BTC) sebelum jual
+            base_currency = symbol.split('/')[0]  # "BTC" dari "BTC/USDT"
+            available = await self.fetch_wallet_balance(exchange_id, base_currency)
+            
+            if available <= 0:
+                self.logger.warning(
+                    f"SELL skipped: No {base_currency} balance to sell on {exchange_id}. "
+                    f"Spot exchange cannot short without owning the asset."
+                )
+                return None
+            
+            # Jual semua yang ada atau sesuai amount (pilih yang lebih kecil)
+            sell_amount = min(amount, available * 0.999)  # 0.999 untuk toleransi fee
+            if sell_amount <= 0:
+                self.logger.warning(f"SELL skipped: Effective sell amount is zero.")
+                return None
+            
+            self.logger.critical(f"LIVE EXECUTION: Creating Market SELL for {sell_amount:.8f} {symbol} on {exchange_id}")
+            order = await exchange.create_market_sell_order(symbol, sell_amount)
+            self.logger.info(f"Live SELL order filled: {order.get('id', 'N/A')} @ avg {order.get('average', 'N/A')}")
+            return order
+        except Exception as e:
+            self.logger.error("Live SELL order failed: %s", e)
+            return None
+
