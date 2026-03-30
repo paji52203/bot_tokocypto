@@ -106,6 +106,7 @@ class CryptoTradingBot:
         self.current_exchange = None
         self.current_symbol: Optional[str] = None
         self.current_timeframe: Optional[str] = None
+        self.current_check_interval = 0  # 0 means follow timeframe candle
 
     async def initialize(self):
         """Initialize all components."""
@@ -238,8 +239,11 @@ class CryptoTradingBot:
 
         while self.running:
             try:
-                # Check for manual overrides (coin, timeframe) before each analysis
+                # Check for manual overrides (coin, timeframe, interval)
                 await self._check_manual_overrides()
+                
+                # Sync real balance if on Tokocrypto
+                await self._sync_exchange_balance()
                 
                 check_count += 1
                 await self._execute_trading_check(check_count, force_news_update=is_regular_run, is_candle_close=is_regular_run)
@@ -440,19 +444,27 @@ class CryptoTradingBot:
             return None
 
     async def _wait_for_next_timeframe(self):
-        """Wait until the next timeframe candle starts."""
+        """Wait until the next timeframe candle starts or custom interval expires."""
         try:
             current_time_ms = int(time.time() * 1000)
 
-            # Calculate next candle start using validator (handles alignment)
-            next_candle_ms = TimeframeValidator.calculate_next_candle_time(current_time_ms, self.current_timeframe)
-            delay_ms = next_candle_ms - current_time_ms + (CANDLE_BUFFER_SECONDS * 1000)
-            delay_seconds = max(0, delay_ms / 1000)
+            # 1. Check if we have a custom interval override
+            if self.current_check_interval > 0:
+                delay_seconds = self.current_check_interval * 60
+                next_check_time = datetime.fromtimestamp(time.time() + delay_seconds, timezone.utc)
+                self.logger.info("Custom check interval active: %dm. Next check at %s UTC", 
+                                 self.current_check_interval, next_check_time.strftime('%Y-%m-%d %H:%M:%S'))
+            else:
+                # 2. Standard behavior: Calculate next candle start using validator
+                next_candle_ms = TimeframeValidator.calculate_next_candle_time(current_time_ms, self.current_timeframe)
+                delay_ms = next_candle_ms - current_time_ms + (CANDLE_BUFFER_SECONDS * 1000)
+                delay_seconds = max(0, delay_ms / 1000)
+                next_check_time = datetime.fromtimestamp(next_candle_ms / 1000, timezone.utc)
+                self.logger.info("Next check at %s UTC (in %.0fs)", next_check_time.strftime('%Y-%m-%d %H:%M:%S'), delay_seconds)
 
-            next_check_time = datetime.fromtimestamp(next_candle_ms / 1000, timezone.utc)
-            self.logger.info("Next check at %s UTC (in %.0fs)", next_check_time.strftime('%Y-%m-%d %H:%M:%S'), delay_seconds)
             if self.dashboard_state:
                 await self.dashboard_state.update_next_check(next_check_time)
+            
             return await self._interruptible_sleep(delay_seconds)
 
         except Exception as e:
@@ -599,6 +611,20 @@ class CryptoTradingBot:
             self.logger.debug("Position status loop cancelled")
             raise
 
+    async def _sync_exchange_balance(self):
+        """Sync actual exchange balance to dashboard state if live."""
+        if not self.dashboard_state:
+            return
+            
+        try:
+            # Sync USDT (or quote) balance from Tokocrypto if possible
+            quote = self.config.QUOTE_CURRENCY
+            balance = await self.exchange_manager.get_balance(quote)
+            if balance is not None and balance > 0:
+                await self.dashboard_state.update_capital(balance)
+        except Exception as e:
+            self.logger.debug("Minor: Could not sync live balance: %s", e)
+
     async def _show_help(self):
         """Show help information about available commands."""
         self.keyboard_handler.display_help()
@@ -624,35 +650,37 @@ class CryptoTradingBot:
                 data = json.load(f)
                 manual_coin = data.get("manual_coin", "").strip().upper()
                 manual_timeframe = data.get("timeframe", "").strip().lower()
+                manual_interval = data.get("check_interval_mins", 0)
                 
                 changed = False
                 
                 # Check Coin Switch
                 if manual_coin and manual_coin != self.current_symbol:
                     self.logger.info("Manual coin override detected: %s -> %s", self.current_symbol, manual_coin)
-                    
-                    # Verify if exchange supports the new symbol
                     exchange, _ = await self.exchange_manager.find_symbol_exchange(manual_coin)
                     if exchange:
                         self.current_symbol = manual_coin
                         self.current_exchange = exchange
                         changed = True
                     else:
-                        self.logger.error("Symbol %s not found on any configured exchange. Staying on %s", manual_coin, self.current_symbol)
+                        self.logger.error("Symbol %s not found on any configured exchange", manual_coin)
 
                 # Check Timeframe Switch
                 if manual_timeframe and manual_timeframe != self.current_timeframe:
-                    self.logger.info("Manual timeframe override detected: %s -> %s", self.current_timeframe, manual_timeframe)
-                    # Validate timeframe (basic check)
+                    self.logger.info("Manual timeframe override: %s -> %s", self.current_timeframe, manual_timeframe)
                     valid_timeframes = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d']
                     if manual_timeframe in valid_timeframes:
                         self.current_timeframe = manual_timeframe
                         changed = True
-                    else:
-                        self.logger.error("Unsupported timeframe override: %s. Staying on %s", manual_timeframe, self.current_timeframe)
+
+                # Check Interval Switch
+                if manual_interval is not None and int(manual_interval) != self.current_check_interval:
+                    self.logger.info("Manual check interval override: %dm -> %dm", 
+                                     self.current_check_interval, int(manual_interval))
+                    self.current_check_interval = int(manual_interval)
+                    # changing interval doesn't require analyzer re-init, just sleep duration change
 
                 if changed:
-                    # Re-initialize analyzer
                     self.market_analyzer.initialize_for_symbol(
                         symbol=self.current_symbol,
                         exchange=self.current_exchange,

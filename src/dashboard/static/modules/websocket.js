@@ -169,16 +169,26 @@ async function fetchInitialCountdown() {
  */
 function updateCountdownDisplay() {
     const element = document.getElementById('next-analysis');
-    if (!element) return;
+    const headerEl = document.getElementById('header-countdown');
+    
+    if (!element && !headerEl) return;
+    
     if (!window._nextCheckUTC) {
-        element.textContent = '--:--';
+        if (element) element.textContent = '--:--';
+        if (headerEl) headerEl.textContent = '--:--';
         return;
     }
+    
     const now = new Date();
     const remaining = (window._nextCheckUTC.getTime() - now.getTime()) / 1000;
+    
+    let text = '--:--';
     if (remaining <= 0) {
-        element.textContent = 'soon...';
+        text = 'soon...';
     } else {
-        element.textContent = formatDuration(remaining);
+        text = formatDuration(remaining);
     }
+    
+    if (element) element.textContent = text;
+    if (headerEl) headerEl.textContent = text;
 }

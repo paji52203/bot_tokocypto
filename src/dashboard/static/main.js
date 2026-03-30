@@ -59,166 +59,43 @@ async function fetchBrainStatus() {
     try {
         const response = await fetch('/api/brain/status');
         const data = await response.json();
+        
+        // Update Connection UI
         const connStatus = document.getElementById('connection-status');
         const statusDot = document.querySelector('.status-dot');
-
         if (connStatus) {
             connStatus.textContent = 'Connected';
-            connStatus.classList.remove('status-text', 'disconnected');
-            connStatus.classList.add('status-text', 'connected');
-            connStatus.style.color = ''; // Clear inline style if present
+            connStatus.classList.remove('disconnected');
+            connStatus.classList.add('connected');
         }
-
         if (statusDot) {
             statusDot.classList.remove('disconnected');
             statusDot.classList.add('connected');
         }
 
-        // Update Brain State Indicator
-        // (Legacy indicator removed from UI, skipping update)
+        // Update Header Active Pair
+        const headerPair = document.getElementById('header-active-pair');
+        if (headerPair) {
+            headerPair.textContent = `${data.symbol || '--'} @ ${data.timeframe || '--'}`;
+        }
 
-        // Direct update to Overview KPIs
+        // Update Overview KPIs
         const trendEl = document.getElementById('overview-trend');
         if (trendEl) {
             trendEl.textContent = data.trend || '--';
-            if (data.trend === 'BULLISH') {
-                trendEl.className = 'value start-green';
-            } else if (data.trend === 'BEARISH') {
-                trendEl.className = 'value start-red';
-            } else {
-                trendEl.className = 'value'; // default color
-            }
+            trendEl.className = 'value ' + (data.trend === 'BULLISH' ? 'start-green' : (data.trend === 'BEARISH' ? 'start-red' : ''));
         }
 
         const confEl = document.getElementById('overview-conf');
-        if (confEl) {
-            confEl.textContent = data.confidence ? `${data.confidence}%` : '--%';
-        }
+        if (confEl) confEl.textContent = data.confidence ? `${data.confidence}%` : '--%';
 
         const actionEl = document.getElementById('overview-action');
-        if (actionEl) {
-            actionEl.textContent = data.action || 'WAITING';
-            // Styling logic for action (sub-label text color usually muted, but user had color logic)
-            // The previous logic colored the text. Let's keep it consistent if possible, 
-            // but usually sub-labels are muted. The legacy code colored #action-val.
-            // syncStatus copied text content, but NOT style. 
-            // WAIT - syncStatus did NOT copy style from action-val to overview-action.
-            // It only did: document.getElementById('overview-action').textContent = act;
-            // So visible UI was NOT colored. I will stick to text content to match visible behavior.
-        }
+        if (actionEl) actionEl.textContent = data.action || 'WAITING';
 
         state.lastUpdateTime = new Date();
         updateLastUpdated();
     } catch (e) {
-        const connStatus = document.getElementById('connection-status');
-        const statusDot = document.querySelector('.status-dot');
-
-        if (connStatus) {
-            connStatus.textContent = 'Disconnected';
-            connStatus.classList.remove('status-text', 'connected');
-            connStatus.classList.add('status-text', 'disconnected');
-            connStatus.style.color = ''; // Clear inline style if present
-        }
-
-        if (statusDot) {
-            statusDot.classList.remove('connected');
-            statusDot.classList.add('disconnected');
-        }
-    }
-}
-
-async function fetchRules() {
-    try {
-        const response = await fetch('/api/brain/rules');
-        const rules = await response.json();
-
-        // Direct update to Rules Count KPI
-        const countEl = document.getElementById('overview-rules-count');
-        const hintEl = document.getElementById('overview-rules-hint');
-
-        if (countEl) {
-            const count = rules.length;
-            countEl.textContent = count;
-
-            if (hintEl) {
-                hintEl.style.display = count > 0 ? 'none' : 'block';
-            }
-        }
-
-    } catch (e) {
-        console.error("Failed to fetch rules", e);
-    }
-}
-
-function updateLastUpdated() {
-    const el = document.getElementById('last-updated');
-    if (el && state.lastUpdateTime) {
-        el.textContent = `Updated: ${new Intl.DateTimeFormat(navigator.language, { timeStyle: 'medium' }).format(state.lastUpdateTime)}`;
-    }
-}
-
-function togglePanelMinimize(panelId) {
-    const panel = document.getElementById(panelId);
-    if (panel) {
-        const isMinimized = panel.classList.toggle('minimized');
-        const btn = panel.querySelector('.toolbar-btn[title="Minimize"], .toolbar-btn[title="Expand"]');
-        if (btn) {
-            btn.innerHTML = isMinimized
-                ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>'
-                : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-            btn.title = isMinimized ? 'Expand' : 'Minimize';
-            btn.setAttribute('aria-expanded', String(!isMinimized));
-
-            const titleEl = panel.querySelector('h3');
-            const panelName = titleEl ? titleEl.textContent.toLowerCase() : 'panel';
-            btn.setAttribute('aria-label', isMinimized ? `Expand ${panelName}` : `Minimize ${panelName}`);
-        }
-    }
-}
-
-async function fetchSystemStatus() {
-    try {
-        const response = await fetch('/api/system/status');
-        const data = await response.json();
-        
-        const icon = document.getElementById('api-status-icon');
-        const text = document.getElementById('api-status-text');
-        const btnStart = document.getElementById('btn-system-start');
-        const btnStop = document.getElementById('btn-system-stop');
-        
-        if (!icon || !btnStart) return;
-        
-        if (data.system_ready) {
-            icon.textContent = '✅';
-            icon.style.color = '#10b981';
-            text.textContent = 'API Keys Integrated';
-            if (!data.bot_running) {
-                btnStart.disabled = false;
-                btnStart.style.opacity = '1';
-                btnStart.style.cursor = 'pointer';
-            }
-        } else {
-            icon.textContent = '❌';
-            icon.style.color = '#ef4444';
-            text.textContent = 'API Config Required';
-            btnStart.disabled = true;
-            btnStart.style.opacity = '0.5';
-            btnStart.style.cursor = 'not-allowed';
-        }
-        
-        if (data.bot_running) {
-            btnStart.style.display = 'none';
-            btnStop.style.display = 'flex';
-            btnStop.disabled = false;
-            btnStop.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg> Stop AI Engine';
-        } else {
-            btnStart.style.display = 'flex';
-            btnStop.style.display = 'none';
-            btnStart.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> Start AI Engine';
-        }
-        
-    } catch (e) {
-        console.error("System status check failed", e);
+        console.warn("Brain status fetch failed", e);
     }
 }
 
@@ -227,45 +104,43 @@ async function fetchManualSettings() {
         const response = await fetch('/api/settings/overrides');
         const data = await response.json();
         
-        const coinEl = document.getElementById('setting-coin');
-        const slEl = document.getElementById('setting-sl');
-        const tpEl = document.getElementById('setting-tp');
-        const minAllocEl = document.getElementById('setting-min-alloc');
-        const maxAllocEl = document.getElementById('setting-max-alloc');
-        const timeframeEl = document.getElementById('setting-timeframe');
+        const map = {
+            'setting-coin': data.manual_coin,
+            'setting-timeframe': data.timeframe,
+            'setting-work-interval': data.check_interval_mins,
+            'setting-sl': data.stop_loss_pct,
+            'setting-tp': data.take_profit_pct,
+            'setting-initial-capital': data.initial_capital,
+            'setting-min-alloc': data.min_allocation_pct,
+            'setting-max-alloc': data.max_allocation_pct
+        };
         
-        if (coinEl) coinEl.value = data.manual_coin || '';
-        if (slEl) slEl.value = data.stop_loss_pct || '';
-        if (tpEl) tpEl.value = data.take_profit_pct || '';
-        if (minAllocEl) minAllocEl.value = data.min_allocation_pct || '';
-        if (maxAllocEl) maxAllocEl.value = data.max_allocation_pct || '';
-        if (timeframeEl) timeframeEl.value = data.timeframe || '';
+        Object.keys(map).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = map[id] || (el.tagName === 'SELECT' ? '' : '');
+        });
         
     } catch (e) {
-        console.error("Failed to fetch manual settings", e);
+        console.error("Failed to fetch settings", e);
     }
 }
 
-async function saveManualSettings(e) {
-    if (e) e.preventDefault();
+async function saveManualSettingsGroup(group) {
+    const statusEl = document.getElementById('settings-save-status');
+    const payload = {};
     
-    const statusEl = document.getElementById('settings-status');
-    const btnSave = document.getElementById('btn-save-settings');
-    
-    if (statusEl) {
-        statusEl.textContent = 'Saving...';
-        statusEl.style.display = 'block';
-        statusEl.style.color = '#3b82f6';
+    if (group === 'target') {
+        payload.manual_coin = document.getElementById('setting-coin').value.trim().toUpperCase();
+        payload.timeframe = document.getElementById('setting-timeframe').value;
+        payload.check_interval_mins = parseInt(document.getElementById('setting-work-interval').value) || 0;
+    } else if (group === 'risk') {
+        payload.stop_loss_pct = parseFloat(document.getElementById('setting-sl').value) || 0;
+        payload.take_profit_pct = parseFloat(document.getElementById('setting-tp').value) || 0;
+    } else if (group === 'capital') {
+        payload.initial_capital = parseFloat(document.getElementById('setting-initial-capital').value) || 0;
+        payload.min_allocation_pct = parseFloat(document.getElementById('setting-min-alloc').value) || 0;
+        payload.max_allocation_pct = parseFloat(document.getElementById('setting-max-alloc').value) || 0;
     }
-    
-    const payload = {
-        manual_coin: document.getElementById('setting-coin').value.trim().toUpperCase(),
-        timeframe: document.getElementById('setting-timeframe').value,
-        stop_loss_pct: parseFloat(document.getElementById('setting-sl').value) || 0,
-        take_profit_pct: parseFloat(document.getElementById('setting-tp').value) || 0,
-        min_allocation_pct: parseFloat(document.getElementById('setting-min-alloc').value) || 0,
-        max_allocation_pct: parseFloat(document.getElementById('setting-max-alloc').value) || 0
-    };
     
     try {
         const response = await fetch('/api/settings/overrides', {
@@ -276,18 +151,78 @@ async function saveManualSettings(e) {
         
         if (response.ok) {
             if (statusEl) {
-                statusEl.textContent = '✅ Settings Saved & Applied!';
-                statusEl.style.color = '#10b981';
-                setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+                statusEl.style.display = 'block';
+                setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
             }
-        } else {
-            throw new Error('Failed to save');
+            // If capital changed, refresh performance
+            if (group === 'capital') updatePerformanceData();
         }
     } catch (err) {
-        if (statusEl) {
-            statusEl.textContent = '❌ Error saving settings';
-            statusEl.style.color = '#ef4444';
+        console.error("Save failed", err);
+    }
+}
+
+// Initialize application
+function initApp() {
+    console.log('Initializing Dashboard App...');
+    window.updateAll = updateAll;
+    window.togglePanelMinimize = togglePanelMinimize;
+
+    try {
+        initUI();
+        initPerformanceChart();
+        initSynapseNetwork();
+        initVectorPanel();
+        initFullscreen();
+        initPositionPanel();
+        initStatisticsPanel();
+        initNewsPanel();
+        initWebSocket();
+        startCountdownLoop();
+
+        // New Apply buttons
+        document.querySelectorAll('.btn-partial-save').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const group = btn.getAttribute('data-group');
+                saveManualSettingsGroup(group);
+            });
+        });
+
+        const btnSysStart = document.getElementById('btn-system-start');
+        if (btnSysStart) {
+            btnSysStart.addEventListener('click', async () => {
+                btnSysStart.innerHTML = '<span class="spinner spinner-sm"></span> Booting...';
+                btnSysStart.disabled = true;
+                await fetch('/api/system/start', { method: 'POST' });
+                setTimeout(updateFastLane, 2000);
+            });
         }
+        
+        const btnSysStop = document.getElementById('btn-system-stop');
+        if (btnSysStop) {
+            btnSysStop.addEventListener('click', async () => {
+                btnSysStop.innerHTML = '<span class="spinner spinner-sm"></span> Halting...';
+                btnSysStop.disabled = true;
+                await fetch('/api/system/stop', { method: 'POST' });
+                setTimeout(updateFastLane, 2000);
+            });
+        }
+
+        // Initial updates
+        updateAll();
+        fetchManualSettings();
+
+        // Polling
+        setInterval(updateFastLane, state.fastPollInterval);
+        setInterval(updateSlowLane, state.slowPollInterval);
+
+        document.addEventListener('analysis-complete', () => {
+            updateFastLane();
+            updateSlowLane();
+        });
+
+    } catch (e) {
+        console.error('Error initializing dashboard:', e);
     }
 }
 
@@ -314,100 +249,6 @@ async function updateSlowLane() {
     await updateNewsData();
 }
 
-// Initialize application
-function initApp() {
-    console.log('Initializing Dashboard App...');
-
-    // Make crucial functions global immediately
-    window.updateAll = updateAll;
-
-    window.togglePanelMinimize = togglePanelMinimize;
-
-    // Mobile menu is fully managed by setupMobileMenu() in modules/ui.js
-
-    try {
-        // Event listeners for static buttons
-        const btnMinimize = document.getElementById('btn-minimize-visuals');
-        if (btnMinimize) {
-            btnMinimize.addEventListener('click', () => togglePanelMinimize('panel-visuals'));
-        }
-
-        const btnLightbox = document.getElementById('btn-lightbox-visuals');
-        if (btnLightbox) {
-            btnLightbox.addEventListener('click', () => {
-                const img = document.getElementById('analysis-chart');
-                if (img && img.src && window.openLightbox) window.openLightbox(img.src);
-            });
-        }
-
-        const btnCopyPrompt = document.getElementById('btn-copy-prompt');
-        if (btnCopyPrompt && window.copyPromptContent) {
-            btnCopyPrompt.addEventListener('click', window.copyPromptContent);
-        }
-
-        const btnCopyResponse = document.getElementById('btn-copy-response');
-        if (btnCopyResponse && window.copyResponseContent) {
-            btnCopyResponse.addEventListener('click', window.copyResponseContent);
-        }
-
-        const btnSysStart = document.getElementById('btn-system-start');
-        if (btnSysStart) {
-            btnSysStart.addEventListener('click', async () => {
-                btnSysStart.innerHTML = '<span class="spinner spinner-sm"></span> Booting...';
-                btnSysStart.disabled = true;
-                await fetch('/api/system/start', { method: 'POST' });
-                await fetchSystemStatus();
-            });
-        }
-        
-        const btnSysStop = document.getElementById('btn-system-stop');
-        if (btnSysStop) {
-            btnSysStop.addEventListener('click', async () => {
-                btnSysStop.innerHTML = '<span class="spinner spinner-sm"></span> Halting...';
-                btnSysStop.disabled = true;
-                await fetch('/api/system/stop', { method: 'POST' });
-                await fetchSystemStatus();
-            });
-        }
-
-        const formSettings = document.getElementById('form-manual-settings');
-        if (formSettings) {
-            formSettings.addEventListener('submit', saveManualSettings);
-        }
-
-        initPerformanceChart();
-        initSynapseNetwork();
-        initVectorPanel();
-        initFullscreen();
-        initPositionPanel();
-        initStatisticsPanel();
-        initNewsPanel();
-        initWebSocket();
-        initUI();
-        startCountdownLoop();
-
-        // Initial update
-        updateAll();
-        fetchManualSettings();
-
-        // Start polling lanes...
-        setInterval(updateFastLane, state.fastPollInterval);
-        setInterval(updateSlowLane, state.slowPollInterval);
-
-        // Listen for WS analysis complete
-        document.addEventListener('analysis-complete', () => {
-            console.log('Analysis complete, refreshing...');
-            updateFastLane();
-            updateSlowLane();
-        });
-
-        console.log('Dashboard App Initialized');
-    } catch (e) {
-        console.error('Error initializing dashboard:', e);
-    }
-}
-
-// Run init when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
 } else {

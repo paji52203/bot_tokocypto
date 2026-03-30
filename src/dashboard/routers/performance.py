@@ -26,8 +26,21 @@ class PerformanceRouter:
             return json.load(f)
 
     def _default_statistics(self) -> Dict[str, Any]:
-        """Return a default statistics payload seeded from configured capital."""
+        """Return a default statistics payload seeded from configured or manual capital."""
         initial_capital = getattr(self.config, "DEMO_QUOTE_CAPITAL", 10000.0)
+        
+        # Check for manual initial capital override
+        try:
+            overrides_path = Path(self.config.DATA_DIR) / "manual_overrides.json"
+            if overrides_path.exists():
+                with open(overrides_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    manual_cap = data.get("initial_capital", 0)
+                    if manual_cap and float(manual_cap) > 0:
+                        initial_capital = float(manual_cap)
+        except Exception:
+            pass
+
         return TradingStatistics(
             initial_capital=initial_capital,
             current_capital=initial_capital,

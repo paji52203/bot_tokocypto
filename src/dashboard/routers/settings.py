@@ -13,6 +13,8 @@ class ManualOverrides(BaseModel):
     max_allocation_pct: Optional[float] = 0.0
     manual_coin: Optional[str] = ""
     timeframe: Optional[str] = ""
+    initial_capital: Optional[float] = 0.0
+    check_interval_mins: Optional[int] = 0
 
 class SettingsRouter:
     """Handles manual overrides for trading parameters."""
@@ -21,6 +23,9 @@ class SettingsRouter:
         self.config = config
         self.logger = logger
         self.overrides_path = Path(self.config.DATA_DIR) / "manual_overrides.json"
+        
+        # Callback to trigger bot reload/force analysis
+        self.reload_callback = None
 
         # Register routes
         self.router.add_api_route("/overrides", self.get_overrides, methods=["GET"])
@@ -38,7 +43,10 @@ class SettingsRouter:
                 "take_profit_pct": 0,
                 "min_allocation_pct": 0,
                 "max_allocation_pct": 0,
-                "manual_coin": ""
+                "manual_coin": "",
+                "timeframe": "",
+                "initial_capital": 0,
+                "check_interval_mins": 0
             }
         try:
             with open(self.overrides_path, "r", encoding="utf-8") as f:
@@ -47,15 +55,36 @@ class SettingsRouter:
             self.logger.error("Failed to load overrides: %s", e)
             return {}
 
-    async def update_overrides(self, overrides: ManualOverrides) -> Dict[str, Any]:
-        """Save manual overrides to disk."""
+    async def update_overrides(self, overrides: Dict[str, Any]) -> Dict[str, Any]:
+        """Save manual overrides to disk with merging to prevent nulls."""
         try:
             self._ensure_data_dir()
-            data = overrides.dict()
+            
+            # 1. Load existing data
+            current_data = await self.get_overrides()
+            
+            # 2. Merge with new data (only update provided fields)
+            # Remove keys with None values to avoid overwriting with null
+            filtered_new = {k: v for k, v in overrides.items() if v is not None}
+            current_data.update(filtered_new)
+            
+            # 3. Save merged data
             with open(self.overrides_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4)
-            self.logger.info("Manual overrides updated: %s", data)
-            return {"status": "success", "message": "Overrides saved successfully", "data": data}
+                json.dump(current_data, f, indent=4)
+            
+            self.logger.info("Manual overrides merged and saved: %s", filtered_new)
+            
+            # 4. Trigger bot reload if callback is set
+            if self.reload_callback:
+                self.logger.info("Triggering bot reload via callback...")
+                if hasattr(self.reload_callback, '__call__'):
+                    import asyncio
+                    if asyncio.iscoroutinefunction(self.reload_callback):
+                        await self.reload_callback()
+                    else:
+                        self.reload_callback()
+
+            return {"status": "success", "message": "Overrides applied", "data": current_data}
         except Exception as e:
-            self.logger.error("Failed to save overrides: %s", e)
+            self.logger.error("Failed to update overrides: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
