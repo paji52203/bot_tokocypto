@@ -13,7 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.gzip import GZipMiddleware
 
-from .routers import brain, monitor, visuals, performance, ws_router
+from .routers import brain, monitor, visuals, performance, ws_router, settings
+
 from .dashboard_state import dashboard_state
 
 class DashboardServer:
@@ -422,6 +423,11 @@ class DashboardServer:
         app.include_router(self.visuals_router_instance.router)
         app.include_router(self.performance_router_instance.router)
         app.include_router(websocket_router.router)
+        
+        # Settings Router
+        self.settings_router_instance = settings.SettingsRouter(self.config, self.logger)
+        app.include_router(self.settings_router_instance.router)
+
 
         # Mount Static Files (Frontend)
         # We assume the static folder is in the same directory as this file

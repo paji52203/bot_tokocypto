@@ -222,6 +222,72 @@ async function fetchSystemStatus() {
     }
 }
 
+async function fetchManualSettings() {
+    try {
+        const response = await fetch('/api/settings/overrides');
+        const data = await response.json();
+        
+        const coinEl = document.getElementById('setting-coin');
+        const slEl = document.getElementById('setting-sl');
+        const tpEl = document.getElementById('setting-tp');
+        const minAllocEl = document.getElementById('setting-min-alloc');
+        const maxAllocEl = document.getElementById('setting-max-alloc');
+        
+        if (coinEl) coinEl.value = data.manual_coin || '';
+        if (slEl) slEl.value = data.stop_loss_pct || '';
+        if (tpEl) tpEl.value = data.take_profit_pct || '';
+        if (minAllocEl) minAllocEl.value = data.min_allocation_pct || '';
+        if (maxAllocEl) maxAllocEl.value = data.max_allocation_pct || '';
+        
+    } catch (e) {
+        console.error("Failed to fetch manual settings", e);
+    }
+}
+
+async function saveManualSettings(e) {
+    if (e) e.preventDefault();
+    
+    const statusEl = document.getElementById('settings-status');
+    const btnSave = document.getElementById('btn-save-settings');
+    
+    if (statusEl) {
+        statusEl.textContent = 'Saving...';
+        statusEl.style.display = 'block';
+        statusEl.style.color = '#3b82f6';
+    }
+    
+    const payload = {
+        manual_coin: document.getElementById('setting-coin').value.trim().upper(),
+        stop_loss_pct: parseFloat(document.getElementById('setting-sl').value) || 0,
+        take_profit_pct: parseFloat(document.getElementById('setting-tp').value) || 0,
+        min_allocation_pct: parseFloat(document.getElementById('setting-min-alloc').value) || 0,
+        max_allocation_pct: parseFloat(document.getElementById('setting-max-alloc').value) || 0
+    };
+    
+    try {
+        const response = await fetch('/api/settings/overrides', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+            if (statusEl) {
+                statusEl.textContent = '✅ Settings Saved & Applied!';
+                statusEl.style.color = '#10b981';
+                setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+            }
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = '❌ Error saving settings';
+            statusEl.style.color = '#ef4444';
+        }
+    }
+}
+
 async function updateAll() {
     await updateFastLane();
     await updateSlowLane();
@@ -301,6 +367,11 @@ function initApp() {
             });
         }
 
+        const formSettings = document.getElementById('form-manual-settings');
+        if (formSettings) {
+            formSettings.addEventListener('submit', saveManualSettings);
+        }
+
         initPerformanceChart();
         initSynapseNetwork();
         initVectorPanel();
@@ -314,8 +385,9 @@ function initApp() {
 
         // Initial update
         updateAll();
+        fetchManualSettings();
 
-        // Start polling lanes: fast for critical status/position, slow for heavier panels.
+        // Start polling lanes...
         setInterval(updateFastLane, state.fastPollInterval);
         setInterval(updateSlowLane, state.slowPollInterval);
 

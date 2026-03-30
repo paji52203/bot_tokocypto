@@ -1,5 +1,7 @@
 """Risk Manager for converting signals into actionable trade parameters."""
 
+import json
+from pathlib import Path
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from src.logger.logger import Logger
 from src.contracts.risk_contract import RiskManagerProtocol
@@ -64,15 +66,31 @@ class RiskManager(RiskManagerProtocol):
             dynamic_sl = current_price + dynamic_sl_distance
             dynamic_tp = current_price - dynamic_tp_distance
 
-        # 3. Resolve Final SL/TP (AI vs Dynamic)
-        if stop_loss and stop_loss > 0:
+        # 2.5 Load Manual Overrides
+        overrides = self._get_manual_overrides()
+        manual_sl_pct = overrides.get("stop_loss_pct", 0)
+        manual_tp_pct = overrides.get("take_profit_pct", 0)
+
+        if manual_sl_pct > 0:
+            if direction == "LONG":
+                final_sl = current_price * (1 - (manual_sl_pct / 100))
+            else:
+                final_sl = current_price * (1 + (manual_sl_pct / 100))
+            self.logger.info("Using MANUAL SL override: %.2f%% ($%s)", manual_sl_pct, f"{final_sl:,.2f}")
+        elif stop_loss and stop_loss > 0:
             final_sl = stop_loss
             self.logger.debug("Using AI-provided SL: $%s", f"{final_sl:,.2f}")
         else:
             final_sl = dynamic_sl
             self.logger.info("Using dynamic SL (2x ATR): $%s", f"{final_sl:,.2f}")
 
-        if take_profit and take_profit > 0:
+        if manual_tp_pct > 0:
+            if direction == "LONG":
+                final_tp = current_price * (1 + (manual_tp_pct / 100))
+            else:
+                final_tp = current_price * (1 - (manual_tp_pct / 100))
+            self.logger.info("Using MANUAL TP override: %.2f%% ($%s)", manual_tp_pct, f"{final_tp:,.2f}")
+        elif take_profit and take_profit > 0:
             final_tp = take_profit
             self.logger.debug("Using AI-provided TP: $%s", f"{final_tp:,.2f}")
         else:
@@ -121,6 +139,17 @@ class RiskManager(RiskManagerProtocol):
             final_size_pct = confidence_map.get(confidence.upper(), 0.02)
             self.logger.info("Using confidence-based size: %.1f%%", final_size_pct * 100)
 
+        # 5.5 Apply Manual Allocation Constraints
+        min_alloc = overrides.get("min_allocation_pct", 0) / 100
+        max_alloc = overrides.get("max_allocation_pct", 0) / 100
+
+        if max_alloc > 0 and final_size_pct > max_alloc:
+            self.logger.info("Clamping size to MANUAL MAX allocation: %.1f%%", max_alloc * 100)
+            final_size_pct = max_alloc
+        if min_alloc > 0 and final_size_pct < min_alloc:
+            self.logger.info("Boosting size to MANUAL MIN allocation: %.1f%%", min_alloc * 100)
+            final_size_pct = min_alloc
+
         # 6. Calculate Financials
         allocation = capital * final_size_pct
         quantity = allocation / current_price
@@ -145,3 +174,15 @@ class RiskManager(RiskManagerProtocol):
             rr_ratio=rr_ratio,
             volatility_level=volatility_level
         )
+
+    def _get_manual_overrides(self) -> Dict[str, Any]:
+        """Fetch manual overrides from disk if they exist."""
+        path = Path(self.config.DATA_DIR) / "manual_overrides.json"
+        if not path.exists():
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            self.logger.error("RiskManager failed to load manual overrides: %s", e)
+            return {}

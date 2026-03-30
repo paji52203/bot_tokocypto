@@ -4,6 +4,10 @@ This module defines the `CryptoTradingBot` class, which orchestrates the interac
 between various components like the market analyzer, trading strategy, and external APIs.
 """
 import asyncio
+import os
+import json
+from pathlib import Path
+
 import time
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
@@ -234,6 +238,9 @@ class CryptoTradingBot:
 
         while self.running:
             try:
+                # Check for manual coin override before each analysis
+                await self._check_manual_coin_override()
+                
                 check_count += 1
                 await self._execute_trading_check(check_count, force_news_update=is_regular_run, is_candle_close=is_regular_run)
 
@@ -606,3 +613,36 @@ class CryptoTradingBot:
             for task in self.tasks:
                 if not task.done():
                     task.cancel()
+    async def _check_manual_coin_override(self):
+        """Check if trading coin was manually overridden in dashboard."""
+        path = Path(self.config.DATA_DIR) / "manual_overrides.json"
+        if not path.exists():
+            return
+            
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                manual_coin = data.get("manual_coin", "").strip().upper()
+                
+                if manual_coin and manual_coin != self.current_symbol:
+                    self.logger.info("Manual coin override detected: %s -> %s", self.current_symbol, manual_coin)
+                    
+                    # Verify if exchange supports the new symbol
+                    exchange, _ = await self.exchange_manager.find_symbol_exchange(manual_coin)
+                    if not exchange:
+                        self.logger.error("Symbol %s not found on any configured exchange. Staying on %s", manual_coin, self.current_symbol)
+                        return
+                        
+                    # Switch symbols
+                    self.current_symbol = manual_coin
+                    self.current_exchange = exchange
+                    
+                    # Re-initialize analyzer
+                    self.market_analyzer.initialize_for_symbol(
+                        symbol=self.current_symbol,
+                        exchange=self.current_exchange,
+                        timeframe=self.current_timeframe
+                    )
+                    self.logger.critical("Bot successfully switched to %s", self.current_symbol)
+        except Exception as e:
+            self.logger.error("Error checking manual coin override: %s", e)
