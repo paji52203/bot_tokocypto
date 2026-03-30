@@ -13,7 +13,9 @@ import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
 from plotly.subplots import make_subplots
+
 
 from src.logger.logger import Logger
 from src.utils.profiler import profile_performance
@@ -36,6 +38,13 @@ class ChartGenerator:
         self.format_utils = format_utils
 
         self.formatter = formatter or self._default_formatter
+        
+        # Konfigurasi kaleido untuk Linux Headless
+        try:
+            pio.kaleido.scope.chromium_args += ("--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage")
+        except Exception:
+            pass
+
 
         # AI-optimized colors for better pattern recognition
         self.ai_colors = {
@@ -248,7 +257,10 @@ class ChartGenerator:
         except Exception as e:
             if self.logger:
                 self.logger.error("Error generating chart image: %s", str(e))
+                import traceback
+                self.logger.debug("Chart Traceback: %s", traceback.format_exc())
             raise
+
 
     def _create_simple_candlestick_chart(
         self,

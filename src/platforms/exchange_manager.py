@@ -327,11 +327,18 @@ class ExchangeManager:
                 )
                 return None
             
-            # Jual semua yang ada atau sesuai amount (pilih yang lebih kecil)
+            # Jual sesuai yang dihitung (pilih yang lebih kecil antara target vs saldo)
             sell_amount = min(amount, available * 0.999)  # 0.999 untuk toleransi fee
-            if sell_amount <= 0:
-                self.logger.warning(f"SELL skipped: Effective sell amount is zero.")
+            
+            # CEK MINIMAL ORDER TOKOCRYPTO (Batas presisi bursa)
+            min_precision = 0.00001  # Standar Tokocrypto untuk BTC/USDT
+            if sell_amount < min_precision:
+                self.logger.warning(
+                    f"SELL skipped: {sell_amount:.8f} BTC is below minimum precision {min_precision}. "
+                    f"Asset balance is too small (dust)."
+                )
                 return None
+
             
             self.logger.critical(f"LIVE EXECUTION: Creating Market SELL for {sell_amount:.8f} {symbol} on {exchange_id}")
             order = await exchange.create_market_sell_order(symbol, sell_amount)
