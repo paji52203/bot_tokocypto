@@ -269,7 +269,7 @@ class ExchangeManager:
         return all_symbols
 
     async def fetch_wallet_balance(self, exchange_id: str, currency: str) -> float:
-        """Fetch real free balance for a specific currency"""
+        """Fetch real free balance for a specific currency."""
         try:
             exchange = await self._ensure_exchange_loaded(exchange_id)
             if not exchange:
@@ -277,7 +277,7 @@ class ExchangeManager:
             if not getattr(exchange, 'apiKey', None):
                 self.logger.warning(f"Cannot fetch balance on {exchange_id}: API keys not set.")
                 return 0.0
-            
+
             balance = await exchange.fetch_balance()
             if currency in balance and 'free' in balance[currency]:
                 return float(balance[currency]['free'])
@@ -285,21 +285,60 @@ class ExchangeManager:
         except Exception as e:
             self.logger.error("Failed to fetch balance: %s", e)
             return 0.0
-            
-    async def create_market_buy_order(self, exchange_id: str, symbol: str, amount: float, quote_amount: float = 0.0) -> Optional[Dict]:
+
+    async def get_balance(self, currency: str) -> float:
+        """Convenience alias used by app.py to fetch wallet balance from Tokocrypto."""
+        return await self.fetch_wallet_balance("tokocrypto", currency)
+
+    def _get_market_limits(self, exchange: Any, symbol: str) -> tuple:
+        """Return (min_amount, min_notional) from market info, with safe fallbacks.
+
+        Returns:
+            (min_amount, min_notional): floats. min_amount is minimum qty,
+            min_notional is minimum USDT order value.
+        """
+        try:
+            markets = getattr(exchange, 'markets', {})
+            market = markets.get(symbol, {})
+            limits = market.get('limits', {})
+            min_amount   = limits.get('amount', {}).get('min') or 0.00001
+            min_notional = limits.get('cost',   {}).get('min') or 10.0  # 10 USDT fallback
+            return float(min_amount), float(min_notional)
+        except Exception:
+            return 0.00001, 10.0
+
+    async def create_market_buy_order(
+        self, exchange_id: str, symbol: str, amount: float, quote_amount: float = 0.0
+    ) -> Optional[Dict]:
         """Execute a REAL live market buy order. WARNING: SPENDS ACTUAL FUNDS.
-        
+
         For Tokocrypto (Binance-based): passes USDT cost (quote_amount), not BTC quantity.
+        Validates minimum notional (min USDT value) before sending.
         """
         try:
             exchange = await self._ensure_exchange_loaded(exchange_id)
             if not exchange:
                 return None
+
             # Tokocrypto market buy: kirim cost USDT bukan qty BTC
             cost = quote_amount if quote_amount > 0 else amount
-            self.logger.critical(f"LIVE EXECUTION: Creating Market BUY ${cost:.2f} USDT of {symbol} on {exchange_id}")
+
+            # Validasi minimum order value (min notional)
+            _, min_notional = self._get_market_limits(exchange, symbol)
+            if cost < min_notional:
+                self.logger.warning(
+                    f"BUY skipped: Order value ${cost:.2f} USDT is below exchange minimum "
+                    f"${min_notional:.2f} USDT for {symbol}. Increase capital allocation."
+                )
+                return None
+
+            self.logger.critical(
+                f"LIVE EXECUTION: Creating Market BUY ${cost:.2f} USDT of {symbol} on {exchange_id}"
+            )
             order = await exchange.create_market_buy_order(symbol, cost)
-            self.logger.info(f"Live BUY order filled: {order.get('id', 'N/A')} @ avg {order.get('average', 'N/A')}")
+            self.logger.info(
+                f"Live BUY order filled: {order.get('id', 'N/A')} @ avg {order.get('average', 'N/A')}"
+            )
             return order
         except Exception as e:
             self.logger.error("Live BUY order failed: %s", e)
@@ -329,13 +368,13 @@ class ExchangeManager:
             
             # Jual sesuai yang dihitung (pilih yang lebih kecil antara target vs saldo)
             sell_amount = min(amount, available * 0.999)  # 0.999 untuk toleransi fee
-            
-            # CEK MINIMAL ORDER TOKOCRYPTO (Batas presisi bursa)
-            min_precision = 0.00001  # Standar Tokocrypto untuk BTC/USDT
-            if sell_amount < min_precision:
+
+            # CEK MINIMAL ORDER: ambil dari market info supaya akurat untuk semua coin
+            min_amount, _ = self._get_market_limits(exchange, symbol)
+            if sell_amount < min_amount:
                 self.logger.warning(
-                    f"SELL skipped: {sell_amount:.8f} BTC is below minimum precision {min_precision}. "
-                    f"Asset balance is too small (dust)."
+                    f"SELL skipped: {sell_amount:.8f} is below exchange minimum "
+                    f"{min_amount} for {symbol}. Balance may be dust."
                 )
                 return None
 
