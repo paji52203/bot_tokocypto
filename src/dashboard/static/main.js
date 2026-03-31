@@ -344,7 +344,7 @@ function initApp() {
         setInterval(updateFastLane, state.fastPollInterval);
         setInterval(updateSlowLane, state.slowPollInterval);
 
-        // WebSocket broadcast refresh
+        // WebSockets for dashboard modules are implemented per module
         document.addEventListener('analysis-complete', () => {
             updateFastLane();
             updateSlowLane();
@@ -352,6 +352,11 @@ function initApp() {
 
     } catch (e) {
         console.error('Error initializing dashboard:', e);
+    } finally {
+        const loadingEl = document.getElementById('loading');
+        if(loadingEl) loadingEl.style.display = 'none';
+        const contentEl = document.getElementById('dashboard-content');
+        if(contentEl) contentEl.classList.remove('hidden');
     }
 }
 

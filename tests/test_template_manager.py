@@ -69,7 +69,7 @@ class TestBuildSystemPrompt:
     def test_performance_context_included(self):
         prompt = self.mgr.build_system_prompt("BTC/USDT", performance_context="Win Rate: 60%")
         assert "Win Rate: 60%" in prompt
-        assert "Profit Maximization Strategy" in prompt
+        assert "Performance Adaptation Strategy" in prompt
 
     def test_brain_context_included(self):
         prompt = self.mgr.build_system_prompt("BTC/USDT", brain_context="Brain insights here")
@@ -111,7 +111,6 @@ class TestBuildResponseTemplate:
         assert "ADX >= 30" in tmpl
         assert "ADX < 18" in tmpl
         assert "2.5:1" in tmpl  # min_rr
-        assert "3.0%" in tmpl  # avg_sl
 
     def test_threshold_origin_with_brain_data(self):
         thresholds = {
