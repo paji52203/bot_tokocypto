@@ -137,12 +137,38 @@ export function initPerformanceChart() {
         }
     };
 
-    chart = new ApexCharts(document.querySelector("#performance-chart"), options);
-    chart.render();
-    window.performanceChart = chart;
+    try {
+        chart = new ApexCharts(document.querySelector("#performance-chart"), options);
+        chart.render();
+        window.performanceChart = chart;
+    } catch (e) {
+        console.error("ApexCharts failed to initialize. Usually means the CDN was blocked by browser extensions or AdBlockers.", e);
+        document.querySelector("#performance-chart").innerHTML = "<div style='color: #8b949e; text-align: center; padding: 50px 0;'>Performance chart disabled / CDN blocked.</div>";
+    }
 }
 
 export async function updatePerformanceData() {
+    try {
+        // Fetch and update top summary stats regardless of chart state
+        const statsResponse = await fetch('/api/performance/stats');
+        const stats = await statsResponse.json();
+        
+        const statsEl = document.getElementById('stats-summary');
+        if (statsEl && stats && Object.keys(stats).length > 0) {
+            const pnlColor = (stats.total_pnl_pct || 0) >= 0 ? '#238636' : '#f85149';
+            const winColor = (stats.win_rate || 0) >= 50 ? '#238636' : '#f85149';
+            
+            statsEl.innerHTML = `
+                <span><strong>Trades:</strong> ${stats.total_trades || 0}</span>
+                <span><strong>Win Rate:</strong> <span style="color: ${winColor}">${(stats.win_rate || 0).toFixed(1)}%</span></span>
+                <span><strong>P&L:</strong> <span style="color: ${pnlColor}">${(stats.total_pnl_pct || 0) >= 0 ? '+' : ''}${(stats.total_pnl_pct || 0).toFixed(2)}%</span></span>
+                <span><strong>Capital:</strong> ${new Intl.NumberFormat(navigator.language, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(stats.current_capital || 0)}</span>
+            `;
+        }
+    } catch (e) {
+        console.error("Failed to update summary navbar stats", e);
+    }
+
     if (!chart) return;
     
     try {
@@ -223,24 +249,7 @@ export async function updatePerformanceData() {
                 chart.updateOptions({ annotations: { points: annotations } });
             }
         }
-        
-        // Fetch stats separately
-        const statsResponse = await fetch('/api/performance/stats');
-        const stats = await statsResponse.json();
-        
-        const statsEl = document.getElementById('stats-summary');
-        if (statsEl && stats) {
-            const pnlColor = (stats.total_pnl_pct || 0) >= 0 ? '#238636' : '#f85149';
-            const winColor = (stats.win_rate || 0) >= 50 ? '#238636' : '#f85149';
-            
-            statsEl.innerHTML = `
-                <span><strong>Trades:</strong> ${stats.total_trades || 0}</span>
-                <span><strong>Win Rate:</strong> <span style="color: ${winColor}">${(stats.win_rate || 0).toFixed(1)}%</span></span>
-                <span><strong>P&L:</strong> <span style="color: ${pnlColor}">${(stats.total_pnl_pct || 0) >= 0 ? '+' : ''}${(stats.total_pnl_pct || 0).toFixed(2)}%</span></span>
-                <span><strong>Capital:</strong> ${new Intl.NumberFormat(navigator.language, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(stats.current_capital || 0)}</span>
-            `;
-        }
-        
+
     } catch (e) {
         console.error("Failed to update performance chart", e);
     }
