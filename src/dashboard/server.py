@@ -85,11 +85,9 @@ class DashboardServer:
         if hasattr(self, 'visuals_router_instance'):
             self.visuals_router_instance.analysis_engine = self.analysis_engine
 
-        if hasattr(self, 'settings_router_instance'):
-            # bot._force_analysis_now
-            bot = deps.get('bot')
-            if bot:
-                self.settings_router_instance.reload_callback = bot._force_analysis_now
+        # Note: settings_router_instance.reload_callback is wired directly
+        # from CompositionRoot._start_trading_bot() after the bot is created,
+        # so no additional wiring is needed here.
 
     def _create_app(self) -> FastAPI:
         """Create and configure the FastAPI application."""

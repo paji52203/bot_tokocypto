@@ -171,6 +171,7 @@ class CompositionRoot:
         self.logger.install_crash_handler()
         self.loop = None
         self.shutdown_manager = None
+        self._http_session = None  # Track aiohttp session for proper cleanup
 
     async def build_dependencies(self) -> dict:
         """Build all dependencies for the trading bot via segmented provisions."""
@@ -235,6 +236,7 @@ class CompositionRoot:
         await exchange_manager.initialize()
 
         session = aiohttp.ClientSession()
+        self._http_session = session  # Store reference for cleanup on shutdown
         keyboard_handler = KeyboardHandler(logger=self.logger)
 
         return {
@@ -538,6 +540,9 @@ class CompositionRoot:
         self._bot_running = True
         if self.dashboard_server:
             self.dashboard_server.bot_running = True
+            # Wire reload_callback to force bot re-analysis when settings change
+            if hasattr(self.dashboard_server, 'settings_router_instance'):
+                self.dashboard_server.settings_router_instance.reload_callback = self.bot._force_analysis_now
             
         self.bot_task = asyncio.create_task(self.bot.run(symbol, timeframe))
         self.logger.info("Bot logic successfully started and engaged.")
@@ -622,6 +627,9 @@ class CompositionRoot:
             await self._stop_trading_bot()
             if hasattr(self, 'dashboard_server') and self.dashboard_server:
                 await self.dashboard_server.stop()
+            # Close aiohttp session cleanly to prevent 'Unclosed client session' errors
+            if self._http_session and not self._http_session.closed:
+                await self._http_session.close()
     
     def start(self):
         """Main entry point with clean shutdown delegation."""
